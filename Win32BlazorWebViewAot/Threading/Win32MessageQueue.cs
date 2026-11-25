@@ -1,8 +1,6 @@
-// A thread-affine work queue for a Win32 UI thread.
-//
-// Work posted from any thread lands in a concurrent queue and is drained on the UI thread by a message-only window, so
-// continuations of WebView2 work resume where COM says they must. One queue per UI thread: several windows on the same
-// thread share it rather than each installing its own synchronization context.
+// A thread-affine work queue for a Win32 UI thread: posted work is drained by a message-only window, and one queue serves
+// every window on that thread.
+// Why one per thread and how shutdown behaves: "Threading" in doc/DESIGN.md.
 
 namespace Win32BlazorWebViewAot
 {

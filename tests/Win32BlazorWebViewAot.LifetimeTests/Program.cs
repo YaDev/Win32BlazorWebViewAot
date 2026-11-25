@@ -764,7 +764,7 @@ internal static class Program
 		WaitFor(() => window.IsDisposed, TimeSpan.FromSeconds(30), "the window to close");
 	}
 
-	// REVIEW.md §3.2: a bug in one handler must not be a hard process crash. WM_MOVE lands on this thread's message loop and
+	// A bug in one handler must not be a hard process crash. WM_MOVE lands on this thread's message loop and
 	// OnMoved throws on purpose; the throw starts inside user32, so before the library had an exception boundary it unwound
 	// native frames and the runtime failed the process — nothing here could catch it, and the scenario "fails" by never
 	// returning. After the boundary the dispatch answers Windows, reports the failure, and this window is still usable.
@@ -811,7 +811,7 @@ internal static class Program
 		/// <summary>Text carried by the exception the handler throws.</summary>
 		public string Marker { get; set; } = "Deliberate handler failure";
 
-		protected override void OnMoved() => throw new InvalidOperationException($"{Marker} (REVIEW.md §3.2).");
+		protected override void OnMoved() => throw new InvalidOperationException($"{Marker}.");
 	}
 
 	/// <summary>Shows a window whose WM_MOVE handler throws, moves it once, and closes it again.</summary>
@@ -934,7 +934,7 @@ internal static class Program
 	private static bool UnobservedContains(string marker) =>
 		s_unobserved.ToArray().Any(message => message.Contains(marker, StringComparison.Ordinal));
 
-	// The second entry point REVIEW.md §3.2 names: the message-only window that drains Win32MessageQueue is a window
+	// The second entry point of the same boundary: the message-only window that drains Win32MessageQueue is a window
 	// procedure too, and its own reporting path can throw — a subscriber to Win32MessageQueue.UnhandledException that fails
 	// is called from inside it. Same consequence as scenario 15 (the throw starts under user32), so the same boundary applies.
 	private static void ThrowingQueueSubscriberIsReported(IServiceProvider services, int delay)
@@ -953,7 +953,7 @@ internal static class Program
 		{
 			if (args.Exception.Message.Contains("Deliberate queued failure", StringComparison.Ordinal))
 			{
-				throw new InvalidOperationException("Deliberate subscriber failure (REVIEW.md §3.2).");
+				throw new InvalidOperationException("Deliberate subscriber failure.");
 			}
 		};
 
@@ -961,7 +961,7 @@ internal static class Program
 		queue.UnhandledException += badSubscriber;
 		try
 		{
-			if (!queue.TryPost(static () => throw new InvalidOperationException("Deliberate queued failure (REVIEW.md §3.2).")))
+			if (!queue.TryPost(static () => throw new InvalidOperationException("Deliberate queued failure.")))
 			{
 				throw new InvalidOperationException("The queue refused the work, so the scenario proved nothing.");
 			}
@@ -993,10 +993,9 @@ internal static class Program
 		}
 	}
 
-	// G18 regression (user-reported: "i cannot move the window"): a borderless window has no OS caption, so moving it
-	// must come from the page — mousedown on a drag region calls Win32Window.BeginDrag, which starts the native move
-	// loop exactly like AOTrino's FluentUI HelloWorld sample (window.__aotrino.dragWindow()). This presses on the
-	// harness page's caption strip and drags with genuine Win32 input; the window origin must follow.
+	// Regression: a borderless window has no OS caption, so moving it must come from the page — mousedown on a drag region
+	// calls Win32Window.BeginDrag, which starts the same native move loop Windows uses for a caption drag. This presses on
+	// the harness page's caption strip and drags with genuine Win32 input; the window origin must follow.
 	private static void CaptionDragMovesWindow(IServiceProvider services, int delay)
 	{
 		var window = OpenWindow(services, delay);

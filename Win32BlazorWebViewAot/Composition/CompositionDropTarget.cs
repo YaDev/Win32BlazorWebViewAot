@@ -1,12 +1,6 @@
-// External drag & drop for a composition-hosted WebView.
-//
-// A composition-hosted browser has no window of its own, so OLE has nothing to hand a drop to: the host must register
-// itself as the drop target and forward to ICoreWebView2CompositionController3.DragEnter/DragOver/DragLeave/Drop. This is
-// therefore not competing with the page for drops — it is the only object that can receive one.
-//
-// The interface is implemented through the source-generated COM marshalling ([GeneratedComClass] over DirectN's
-// [GeneratedComInterface]), which is what keeps this AOT-safe: no System.Runtime.InteropServices.ComVisible, no
-// System.Windows.Forms, no runtime marshaler (the assembly sets DisableRuntimeMarshalling).
+// External drag & drop for a composition-hosted WebView: registers the host as the OLE drop target and forwards to
+// ICoreWebView2CompositionController3.DragEnter/DragOver/DragLeave/Drop, using source-generated COM marshalling.
+// Why the host has to do this at all: "Input and drop under composition hosting" in doc/DESIGN.md.
 
 using System.Runtime.InteropServices.Marshalling;
 

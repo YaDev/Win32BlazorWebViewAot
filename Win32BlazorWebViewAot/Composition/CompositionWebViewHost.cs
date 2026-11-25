@@ -1,8 +1,6 @@
-// The WebView2 half of a borderless window: an ICoreWebView2CompositionController wired into the window's visual tree,
-// plus the input and cursor plumbing that only composition hosting needs.
-//
-// This class deliberately knows nothing about Blazor. Keeping it separate from WebView2AotBlazorManager is what makes
-// the two failure modes — "composition never came up" vs "Blazor IPC is broken" — debuggable apart from each other.
+// The WebView2 half of a window: an ICoreWebView2CompositionController wired into the visual tree, plus the input and
+// cursor plumbing only composition hosting needs. Knows nothing about Blazor.
+// Why it stays separate from WebView2AotBlazorManager: "Layers" in doc/DESIGN.md.
 
 namespace Win32BlazorWebViewAot
 {

@@ -10,11 +10,29 @@ Native-AOT-clean, verified by running the real-window test suite as a Native AOT
 Documentation lives in [`doc/`](doc/): [getting started](doc/START.md), [design](doc/DESIGN.md),
 [API reference](doc/API.md), [FAQ](doc/FAQ.md).
 
+## Install
+
+```powershell
+dotnet add package Win32BlazorWebViewAot
+```
+
+Or in the project file:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="Win32BlazorWebViewAot" Version="1.0.0" />
+</ItemGroup>
+```
+
+Target `net10.0-windows10.0.19041.0` or later on Windows; win-x64, win-x86 and win-arm64 all work. Installing the package also
+sets two build defaults on your project — [what it changes](doc/DESIGN.md#what-this-package-changes-about-your-project).
+[Start here](doc/START.md) for the first window.
+
 ## Repository layout
 
 | Path | What it is |
 |---|---|
-| `Win32BlazorWebViewAot/` | The library and NuGet package (`dotnet pack`). |
+| `Win32BlazorWebViewAot/` | The library, packed as [Win32BlazorWebViewAot](https://www.nuget.org/packages/Win32BlazorWebViewAot) (`dotnet pack`). |
 | `doc/` | Documentation: getting started, design, API reference, FAQ. |
 | `samples/Win32BlazorWebViewAot.Blazor` | Razor app on a native-caption window. |
 | `samples/Win32BlazorWebViewAot.BlazorBorderless` | Same app, borderless: the page draws its own title bar. |
@@ -22,7 +40,9 @@ Documentation lives in [`doc/`](doc/): [getting started](doc/START.md), [design]
 | `samples/Win32BlazorWebViewAot.HtmlBorderless` | Same HTML app, borderless, page-drawn chrome. |
 | `tests/Win32BlazorWebViewAot.LifetimeTests` | 19-scenario real-window lifetime harness; exit code is the verdict. |
 
-## Quick start
+## Working on this repository
+
+The samples reference the library by `ProjectReference`, so cloning is enough — no package feed involved.
 
 ```powershell
 dotnet build Win32BlazorWebViewAot.slnx          # everything, Debug

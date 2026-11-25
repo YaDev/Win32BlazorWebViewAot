@@ -5,6 +5,8 @@ Hosts Blazor Razor components — or plain HTML and JS — in a native Win32 win
 No WinForms, no WPF, no `Microsoft.Web.WebView2` managed wrappers. Either with a normal Windows title bar, or borderless so the
 page draws its own.
 
+Install from [nuget.org](https://www.nuget.org/packages/Win32BlazorWebViewAot): `dotnet add package Win32BlazorWebViewAot`.
+
 | Read | For |
 | --- | --- |
 | [START.md](START.md) | installing the package and getting a window on screen; how to build and verify this repo |

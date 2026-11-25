@@ -7,6 +7,10 @@ the page draws its own chrome.
 Target: `net10.0-windows10.0.19041.0`, win-x64 / win-x86 / win-arm64. Requires the Evergreen WebView2 Runtime or a fixed-version
 folder you ship.
 
+```powershell
+dotnet add package Win32BlazorWebViewAot
+```
+
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using Win32BlazorWebViewAot;
@@ -31,6 +35,8 @@ window.Run();
 
 Entry points must be `[STAThread]`. For a borderless window use `BorderlessBlazorWebViewWindow` and drag it from your own title bar
 with `Win32Window.BeginDrag()`.
+
+Package page: https://www.nuget.org/packages/Win32BlazorWebViewAot
 
 Documentation: https://github.com/YaDev/Win32BlazorWebViewAot/tree/main/doc — getting started, design, API reference, FAQ.
 

@@ -8,6 +8,33 @@
   redistributes is not a browser — without a runtime the window opens and stays empty.
 - Any CPU: win-x64, win-x86, win-arm64. Runtime legs are tested on x64 and x86; ARM64 publishes clean but has not been run.
 
+## Install
+
+From [nuget.org](https://www.nuget.org/packages/Win32BlazorWebViewAot):
+
+```powershell
+dotnet add package Win32BlazorWebViewAot
+```
+
+Or by hand:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="Win32BlazorWebViewAot" Version="1.0.0" />
+</ItemGroup>
+```
+
+The package brings its own MSBuild defaults and the native `WebView2Loader.dll` for all three architectures; what it sets on your
+project is listed in [DESIGN.md](DESIGN.md#what-this-package-changes-about-your-project).
+
+If you reference the library as a source project instead — which is what the samples in this repository do — those build files are
+not imported for you, so add them explicitly:
+
+```xml
+<Import Project="..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.props" />
+<!-- ...project body... -->
+<Import Project="..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.targets" />
+```
 
 ## First window
 
@@ -59,6 +86,8 @@ way keep `autostart="false"` and call `Blazor.start()` yourself, from a script t
 is on `window`.
 
 ## Run the samples
+
+The samples use a `ProjectReference` to the library in this repository, not the published package.
 
 ```powershell
 dotnet run --project samples/Win32BlazorWebViewAot.Blazor            # Razor app, Windows draws the caption

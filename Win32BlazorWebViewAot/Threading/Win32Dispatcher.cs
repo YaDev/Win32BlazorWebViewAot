@@ -1,11 +1,6 @@
-// Blazor's Dispatcher over the Win32 message queue.
-//
-// The rules Blazor relies on: work dispatched on the UI thread runs inline; work from another thread is scheduled; a
-// dropped item faults its task instead of never completing; exceptions reach the owner's unhandled-exception path.
-//
-// A completed queue rejects everything, including dispatches that arrive on the UI thread itself: once shutdown has
-// begun (Win32MessageQueue.Complete), running "inline" would execute component work against a renderer and browser
-// that are being torn down.
+// Blazor's Dispatcher over the Win32 message queue: inline on the UI thread, scheduled from other threads, and a completed
+// queue rejects everything — including UI-thread dispatches — instead of running against a teardown in progress.
+// The rules it upholds and why: "Threading" in doc/DESIGN.md.
 
 namespace Win32BlazorWebViewAot
 {

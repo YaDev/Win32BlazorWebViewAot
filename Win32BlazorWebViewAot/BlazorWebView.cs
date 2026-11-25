@@ -1,8 +1,6 @@
-// The public entry point of the library: a Razor-component view inside a borderless Win32 window.
-//
-// Everything above this line is configuration; everything below it is machinery. The view owns three things and their
-// teardown order — the dispatcher, the composition host, and the WebView manager — because getting that order wrong is
-// how a desktop Blazor app produces a finalizer crash on exit instead of a clean shutdown.
+// The public entry point of the library: a Razor-component view hosted in a Win32 window's composition tree. Owns the
+// dispatcher, the composition host and the WebView manager, and disposes them in that order.
+// Why that order: "Lifetime" in doc/DESIGN.md.
 
 using System.Collections.Specialized;
 using System.Reflection;

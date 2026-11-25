@@ -1,9 +1,6 @@
-// A window that owns a BlazorWebView and drives it from its own messages.
-//
-// The point of this class is the shutdown order, which is easy to get wrong by hand: WM_CLOSE has to defer destruction,
-// because Razor component disposal is asynchronous and needs both the browser and a live message loop. So OnCloseRequested
-// returns "deferred", the view is disposed on the queue, and only then is the HWND destroyed — at which point the base
-// class posts WM_QUIT if the application asked for one.
+// A window that owns a BlazorWebView and drives it from its own messages. Close is deferred: the view is disposed on the
+// message queue first, and the HWND is destroyed only afterwards.
+// Why the deferral is required: "Lifetime" in doc/DESIGN.md.
 
 namespace Win32BlazorWebViewAot
 {

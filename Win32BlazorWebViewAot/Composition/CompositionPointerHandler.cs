@@ -1,10 +1,6 @@
-// Touch and pen input for a composition-hosted WebView.
-//
-// Mouse forwarding has a managed struct per event; pointer forwarding does not, because the browser reads the whole
-// POINTER_INFO itself from the pointer id. So this class is small: map the message to an event kind, ask the runtime to
-// build the info for that id, hand it over. The interesting part is what happens when the runtime cannot — older
-// WebView2 runtimes do not implement the interface that creates a pointer info — in which case mouse input keeps working
-// and pointer events stop being sent rather than throwing on every touch.
+// Touch and pen input for a composition-hosted WebView: map the message to an event kind, build the POINTER_INFO for the
+// pointer id, hand it over. When the runtime cannot build one, pointer events stop rather than throw; mouse keeps working.
+// Why it is shaped this way: "Input and drop under composition hosting" in doc/DESIGN.md.
 
 namespace Win32BlazorWebViewAot
 {

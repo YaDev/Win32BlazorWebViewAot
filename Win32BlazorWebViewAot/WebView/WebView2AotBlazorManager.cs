@@ -1,9 +1,6 @@
-// The Blazor half of a composition-hosted window.
-//
-// Microsoft's WebViewManager owns the renderer, IPC and static-content resolution; this class supplies the three things
-// only it can: how bytes reach the browser (PostWebMessageAsString), how they arrive (WebMessageReceived), and how a
-// request is answered without an HTTP server. The browser itself belongs to CompositionWebViewHost — this class borrows
-// it and never disposes it, which keeps COM ownership single.
+// The Blazor half of a composition-hosted window: the transport between Microsoft's WebViewManager and the browser —
+// outgoing PostWebMessageAsString, incoming WebMessageReceived, and answers served without an HTTP server.
+// It borrows the browser from CompositionWebViewHost and never disposes it; see "Layers" in doc/DESIGN.md.
 
 using System.Reflection;
 using System.Text.Json;

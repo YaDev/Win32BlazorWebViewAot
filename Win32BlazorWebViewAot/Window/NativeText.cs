@@ -1,14 +1,5 @@
-// A UTF-16 buffer this assembly owns: allocated here, freed here.
-//
-// DirectN's `PWSTR.From(string)` hands out a pointer to memory that lives in the managed allocation space, and
-// `PWSTR.Dispose` releases it with a native free. That mismatch is not a leak but heap corruption — the process dies with
-// STATUS_HEAP_CORRUPTION (0xC0000374), usually at the next unrelated allocation rather than at the offending call, which
-// makes it one of the worst failures to trace after the fact. Verified standalone: `PWSTR.From` alone survives a full
-// compaction; disposing what it returned crashes immediately, with no window code involved.
-//
-// So nothing here calls `PWSTR.Dispose`. The buffers are allocated with `NativeMemory` (plain malloc under
-// DisableRuntimeMarshalling, AOT-safe) and freed with the matching `Free`. Windows copies both the class name at
-// registration and the caption/title at creation, so freeing as soon as the call returns is correct.
+// UTF-16 buffers this assembly allocates and frees itself: NativeMemory allocation, matching Free, never PWSTR.Dispose.
+// The rule is load-bearing — see "Native text buffers" in doc/DESIGN.md.
 
 namespace Win32BlazorWebViewAot
 {
