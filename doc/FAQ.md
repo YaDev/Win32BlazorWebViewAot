@@ -28,7 +28,8 @@ default `wwwroot`).
 ## AOT publish fails inside Blazor's IPC serialization with a project reference
 
 A raw `ProjectReference` does not import the package's `build/*.props` and `*.targets`, which is where the trimming defaults live.
-Import both files yourself — [START.md](START.md#install).
+Import both files yourself — what they set is listed in
+[DESIGN.md](DESIGN.md#what-this-package-changes-about-your-project).
 
 ## `WebView2Loader.dll` was not found
 
@@ -44,7 +45,8 @@ No WebView2 Runtime. Check for Evergreen, or point at a fixed version with `Brow
 ## F12 and F5 do nothing
 
 In release builds that is the design: the app owns its keyboard, so DevTools and browser accelerator keys are off. They come back in
-Debug through `services.AddBlazorWebViewDeveloperTools()` — [RECIPES.md](RECIPES.md#developer-tools-and-reload-keys).
+Debug through `services.AddBlazorWebViewDeveloperTools()`, which this package maps onto the WebView2 user-agent settings that
+open DevTools and re-enable the reload keys.
 
 ## `StartAsync` never completes
 
@@ -53,8 +55,8 @@ running: start it, then call `Run()`.
 
 ## Clicking a caption button also moves the window
 
-The mousedown that hit the button reached the drag region too. Stop propagation on the button container —
-[RECIPES.md](RECIPES.md#move-the-window-from-the-page).
+The mousedown that hit the button reached the drag region too. Stop propagation on the button container, and start the drag
+only from `Win32Window.BeginDrag()` in the title-bar handler.
 
 ## Work posted after closing throws `Win32DispatcherException`
 

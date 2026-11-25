@@ -32,7 +32,7 @@ window.Run();
 Entry points must be `[STAThread]`. For a borderless window use `BorderlessBlazorWebViewWindow` and drag it from your own title bar
 with `Win32Window.BeginDrag()`.
 
-Documentation: https://github.com/YaDev/Win32BlazorWebViewAot/tree/main/doc — getting started, design, recipes, API reference, FAQ.
+Documentation: https://github.com/YaDev/Win32BlazorWebViewAot/tree/main/doc — getting started, design, API reference, FAQ.
 
 Licensed under the MIT license; the license text ships in this package as `LICENSE`. Runtime dependencies are MIT-licensed as well,
 the one exception being the native `WebView2Loader.dll` redistributed here under Microsoft's standard BSD-style redistribution terms.

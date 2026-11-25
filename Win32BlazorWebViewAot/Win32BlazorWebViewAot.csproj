@@ -33,9 +33,9 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <!-- NuGet addresses the readme by its path inside the package and does not care what it is called; only Markdown works. -->
     <PackageReadmeFile>NUGET.md</PackageReadmeFile>
-    <!-- Gallery presence. The repository has not been pushed yet; this is the URL it will live at, so metadata and
-         remote agree from the first publish. NuGet still emits its legacy <licenseUrl> shim beside PackageLicenseFile —
-         that line is generated for old clients and cannot be removed while a license file is packed. -->
+    <!-- Gallery presence. Must match the public repository URL, so package metadata and remote agree. NuGet still emits
+         its legacy <licenseUrl> shim beside PackageLicenseFile — that line is generated for old clients and cannot be
+         removed while a license file is packed. -->
     <PackageProjectUrl>https://github.com/YaDev/Win32BlazorWebViewAot</PackageProjectUrl>
     <RepositoryUrl>https://github.com/YaDev/Win32BlazorWebViewAot</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -43,7 +43,7 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 
     <Product>Win32BlazorWebViewAot</Product>
-    <Description>Host Blazor (Razor components) in a borderless native Win32 window through ICoreWebView2CompositionController, on WebView2Aot. No WinForms, no WPF, no reflection-based COM.</Description>
+    <Description>Host Blazor (Razor components) or plain HTML + JS in a native Win32 window — normal Windows caption, or borderless with page-drawn chrome — through ICoreWebView2CompositionController, on WebView2Aot. No WinForms, no WPF, no reflection-based COM.</Description>
     <PackageTags>blazor;webview;webview2;win32;aot;nativeaot;composition</PackageTags>
   </PropertyGroup>
 

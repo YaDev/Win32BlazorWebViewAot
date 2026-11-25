@@ -55,7 +55,8 @@ internal static class Program
 ```
 
 A Razor project gets that file from its static web assets; a plain `Microsoft.NET.Sdk` project gets it from this package. Either
-way keep `autostart="false"` and call `Blazor.start()` yourself — see the recipe in [RECIPES.md](RECIPES.md#javascript-calling-net).
+way keep `autostart="false"` and call `Blazor.start()` yourself, from a script that runs after the `[JSInvokable]` host object
+is on `window`.
 
 ## Run the samples
 

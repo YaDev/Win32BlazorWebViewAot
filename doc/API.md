@@ -7,7 +7,7 @@ The types you call, and the build switches that change what ships. Plumbing type
 
 ```csharp
 services.AddWin32BlazorWebViewAot();          // returns IWin32BlazorWebViewAotBuilder
-services.AddBlazorWebViewDeveloperTools();     // Debug only, normally; see RECIPES.md
+services.AddBlazorWebViewDeveloperTools();     // Debug only, normally; see the FAQ
 ```
 
 | Member | Purpose |
