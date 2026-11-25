@@ -1,0 +1,134 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Composition hosting needs the projected Windows.UI.Composition types
+      (CompositorController, Compositor, SpriteVisual), which only exist in the Windows SDK projection, so the TFM
+      carries the 10.0.19041.0 floor.
+    -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Platforms>x64;x86;ARM64</Platforms>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>false</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- The host layer must stay warning free under the trim / AOT / single-file analyzers. -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591;IL2026;IL2046;IL2057;IL2060;IL2067;IL2070;IL2072;IL2075;IL2080;IL2087;IL2090;IL2091;IL2092;IL2093;IL2111;IL3000;IL3001;IL3002;IL3050;IL3051</WarningsAsErrors>
+
+    <!--
+      Package identity. The package id is Win32BlazorWebViewAot — deliberately NOT under the
+      Microsoft.* namespace, which only official Microsoft packages may use. Assembly name, root namespace and the
+      packed build/{props,targets} file names all follow that id. GeneratePackageOnBuild
+      stays off so a plain build never pays for packing — `dotnet pack` when a release is wanted.
+    -->
+    <PackageId>Win32BlazorWebViewAot</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Yaser Aldubaisi</Authors>
+    <Copyright>Copyright (c) 2026 Yaser Aldubaisi. Licensed under the MIT license.</Copyright>
+    <!-- The repository carries the license text, so it ships inside the package; PackageLicenseFile and
+         PackageLicenseExpression are mutually exclusive by NuGet's rules. -->
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <!-- NuGet addresses the readme by its path inside the package and does not care what it is called; only Markdown works. -->
+    <PackageReadmeFile>NUGET.md</PackageReadmeFile>
+    <!-- Gallery presence. The repository has not been pushed yet; this is the URL it will live at, so metadata and
+         remote agree from the first publish. NuGet still emits its legacy <licenseUrl> shim beside PackageLicenseFile —
+         that line is generated for old clients and cannot be removed while a license file is packed. -->
+    <PackageProjectUrl>https://github.com/YaDev/Win32BlazorWebViewAot</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/YaDev/Win32BlazorWebViewAot</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>1.0.0 — first release: composition-hosted WebView2 (borderless and native-caption windows), Blazor Hybrid IPC, [JSInvokable] bridge, embedded static content for single-file AOT publishes, custom chrome with resize band, ordered shutdown, and a real-window lifetime harness (JIT + Native AOT x64/x86).</PackageReleaseNotes>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+
+    <Product>Win32BlazorWebViewAot</Product>
+    <Description>Host Blazor (Razor components) in a borderless native Win32 window through ICoreWebView2CompositionController, on WebView2Aot. No WinForms, no WPF, no reflection-based COM.</Description>
+    <PackageTags>blazor;webview;webview2;win32;aot;nativeaot;composition</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.15" />
+    <!-- Reads the content the build embeds (see build/Win32BlazorWebViewAot.targets), so a published exe can carry its own HTML. -->
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.15" />
+    <PackageReference Include="WebView2Aot" Version="1.7.0" />
+    <!-- Only to redistribute the native WebView2Loader.dll; no managed asset reaches a consumer. Pinned, not floating:
+         the loader copies packed under runtimes/ are whatever this resolves to at pack time, so a wildcard would let
+         two packs of the same version carry different native bytes. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4370.26" GeneratePathProperty="true" ExcludeAssets="all" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- DirectNAot / WebView2Aot pass structs across the native boundary; this assembly does no runtime marshalling. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute" />
+
+    <Using Include="System" />
+    <Using Include="System.Collections.Concurrent" />
+    <Using Include="System.Collections.Generic" />
+    <Using Include="System.Collections.ObjectModel" />
+    <Using Include="System.Diagnostics.CodeAnalysis" />
+    <Using Include="System.IO" />
+    <Using Include="System.Linq" />
+    <Using Include="System.Runtime.CompilerServices" />
+    <Using Include="System.Runtime.ExceptionServices" />
+    <Using Include="System.Runtime.InteropServices" />
+    <Using Include="System.Threading" />
+    <Using Include="System.Threading.Tasks" />
+    <Using Include="DirectN" />
+    <Using Include="DirectN.Extensions.Com" />
+    <Using Include="DirectN.Extensions.Utilities" />
+    <Using Include="Microsoft.AspNetCore.Components" />
+		<Using Include="WebView2" />
+		<Using Include="WebView2.Utilities" />
+		<!-- Composition hosting: the projected Windows.UI.Composition types. Our own type names that collide
+		     (CompositionTarget) resolve to this namespace's declarations; the WinRT ones are written global:: qualified. -->
+		<Using Include="Windows.Foundation" />
+		<Using Include="Windows.UI.Composition" />
+		<Using Include="Windows.UI.Composition.Core" />
+		<Using Include="WinRT" />
+  </ItemGroup>
+
+  <!--
+    The native loader inside the executable.
+
+    A published app should be one file: an exe plus a folder of DLLs is not shippable on its own, and WebView2Loader.dll is
+    the only native dependency there is. When a RuntimeIdentifier is in play — which is what every self-contained and Native
+    AOT publish sets, and it flows to referenced projects — this assembly carries that architecture's loader as a resource,
+    and build/Win32BlazorWebViewAot.targets keeps the loose copies out of the publish folder. WebView2Aot's own initializer
+    reads an embedded loader; see WebView2AotBlazorManager.EnsureWebView2LoaderInitialized.
+
+    Every supported architecture goes in, under the path WebView2Aot itself searches (runtimes\win-<arch>\native\...), and the
+    process picks its own at startup. That is deliberate: a RuntimeIdentifier does not reliably reach this project when an
+    application publishes it through a ProjectReference, so picking one architecture here produced a library with no loader
+    embedded and an app that died on "Cannot load WebView2Loader.dll". The three copies cost about half a megabyte.
+
+    Opt out with Win32BlazorWebViewAotEmbedWebView2Loader=false to ship the DLL beside the exe instead.
+  -->
+  <PropertyGroup>
+    <Win32BlazorWebViewAotEmbedWebView2Loader Condition="'$(Win32BlazorWebViewAotEmbedWebView2Loader)' == '' and '$(PkgMicrosoft_Web_WebView2)' != ''">true</Win32BlazorWebViewAotEmbedWebView2Loader>
+    <Win32BlazorWebViewAotEmbedWebView2Loader Condition="'$(Win32BlazorWebViewAotEmbedWebView2Loader)' == ''">false</Win32BlazorWebViewAotEmbedWebView2Loader>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(Win32BlazorWebViewAotEmbedWebView2Loader)' == 'true'">
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x64\native\WebView2Loader.dll"><LogicalName>runtimes/win-x64/native/WebView2Loader.dll</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x86\native\WebView2Loader.dll"><LogicalName>runtimes/win-x86/native/WebView2Loader.dll</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-arm64\native\WebView2Loader.dll"><LogicalName>runtimes/win-arm64/native/WebView2Loader.dll</LogicalName></EmbeddedResource>
+  </ItemGroup>
+
+  <!-- Native loader for every supported architecture: packed as a runtime asset, copied to ProjectReference outputs. -->
+  <ItemGroup Condition="'$(PkgMicrosoft_Web_WebView2)' != ''">
+    <Content Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x64\native\WebView2Loader.dll" Link="runtimes\win-x64\native\WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes/win-x64/native/" Visible="false" />
+    <Content Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x86\native\WebView2Loader.dll" Link="runtimes\win-x86\native\WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes/win-x86/native/" Visible="false" />
+    <Content Include="$(PkgMicrosoft_Web_WebView2)\runtimes\win-arm64\native\WebView2Loader.dll" Link="runtimes\win-arm64\native\WebView2Loader.dll" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes/win-arm64/native/" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\**\*" Pack="true" PackagePath="build\" />
+    <!-- The package readme is doc/NUGET.md, written to stand alone: nuget.org cannot resolve relative links to the rest
+         of doc/. It packs under its own name, which PackageReadmeFile above has to match. -->
+    <None Include="..\doc\NUGET.md" Pack="true" PackagePath="" Visible="false" />
+    <!-- The license text lives at the repository root, not beside this project; it still packs to the package root. -->
+    <None Include="..\LICENSE" Pack="true" PackagePath="" Visible="false" />
+  </ItemGroup>
+
+</Project>

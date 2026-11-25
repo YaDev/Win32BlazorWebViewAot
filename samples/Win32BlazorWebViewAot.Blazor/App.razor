@@ -1,0 +1,20 @@
+@*
+	No chrome here on purpose: this window has a native caption, so Windows owns the title bar — dragging, minimizing,
+	maximizing and closing all happen in the OS caption and the page must not imitate any of it. The borderless sibling
+	(Win32BlazorWebViewAot.BlazorBorderless) is where App.razor draws a .titlebar and drives Win32Window.BeginDrag().
+*@
+
+<Router AppAssembly="@typeof(App).Assembly">
+	<Found Context="routeData">
+		<RouteView RouteData="@routeData" />
+	</Found>
+	<NotFound>
+		<PageTitle>Not found</PageTitle>
+		<div class="shell" role="alert">
+			<header class="masthead">
+				<h1>Nothing is routed here</h1>
+				<p>Use an address the router knows, or go back to <a class="link" href="/">Home</a>.</p>
+			</header>
+		</div>
+	</NotFound>
+</Router>

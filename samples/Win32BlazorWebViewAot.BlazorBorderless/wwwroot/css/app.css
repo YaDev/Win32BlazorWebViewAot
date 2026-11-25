@@ -1,0 +1,255 @@
+/*
+	Graphite Fluent: the look of a Windows desktop utility, not a web page. Flat surfaces separated by hairlines,
+	one accent colour reserved for the primary action and focus, prose in Segoe UI Variable so body copy never
+	falls back to the mono face used for data readouts.
+*/
+:root {
+	--bg: #1b1d20;
+	--card: #232629;
+	--line: rgba(255, 255, 255, .1);
+	--ink: #f4f5f7;
+	--muted: #a3adb8;
+	--accent: #4cc2ff;
+	--mono: "Cascadia Mono", ui-monospace, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+	margin: 0;
+	height: 100%;
+	background: var(--bg);
+	color: var(--ink);
+	font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+	/* A window this size is a maximized desktop, not a phone: scale the type with it instead of leaving a field of empty canvas. */
+	font-size: clamp(15px, .42vw + 10px, 21px);
+	line-height: 1.5;
+	overflow: hidden;
+}
+
+/* This window has no frame and no caption: HTML reaches the physical window edge on every side, and row one of this grid is
+   the title bar the page draws itself. See Win32BlazorWebViewAot.Blazor for a window with native chrome. */
+body {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+#app {
+	display: contents;
+}
+
+.boot {
+	align-self: center;
+	justify-self: start;
+	padding: 2rem;
+	color: var(--muted);
+	font-style: italic;
+}
+
+/* Page shell: heading, cards, then the status strip pinned to the bottom edge. */
+.shell {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	gap: 1rem;
+	width: 100%;
+	max-width: 76rem;
+	margin-inline: auto;
+	padding: 1.25rem 1.5rem;
+	min-height: 0;
+}
+
+.masthead h1 {
+	margin: 0;
+	font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+	font-size: 1.4rem;
+	font-weight: 600;
+	letter-spacing: -.01em;
+}
+
+.masthead p {
+	margin: .25rem 0 0;
+	max-width: 60ch;
+	color: var(--muted);
+}
+
+/* Two columns above ~52rem, one below; rows share the remaining height so a maximized window is filled, not topped up. */
+.cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(26rem, 1fr));
+	grid-auto-rows: minmax(min-content, 1fr);
+	gap: .75rem;
+	min-height: 0;
+	overflow: auto;
+	padding-bottom: .25rem;
+}
+
+.card {
+	display: flex;
+	flex-direction: column;
+	gap: .5rem;
+	padding: .85rem 1rem 1rem;
+	background: var(--card);
+	border: 1px solid var(--line);
+	border-radius: 6px;
+}
+
+.card h2 {
+	margin: 0;
+	font-size: .95rem;
+	font-weight: 600;
+}
+
+.card .note {
+	margin: 0;
+	color: var(--muted);
+	font-size: .85rem;
+}
+
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5rem;
+	align-items: center;
+}
+
+button {
+	font: inherit;
+	padding: .35rem .9rem;
+	border-radius: 4px;
+	border: 1px solid var(--line);
+	background: rgba(255, 255, 255, .06);
+	color: var(--ink);
+	cursor: pointer;
+}
+
+button:hover { background: rgba(255, 255, 255, .1); }
+
+button.primary {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: #08202e;
+	font-weight: 600;
+}
+
+button:focus-visible,
+.link:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.link {
+	color: var(--accent);
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.link:hover { text-decoration: underline; }
+
+code {
+	font-family: var(--mono);
+	font-size: .88em;
+	padding: .05rem .3rem;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, .07);
+}
+
+/* Data readouts — the only place mono belongs. */
+/* Pinned to the bottom of its card so cards of unequal text length still line up. */
+.readout {
+	margin: auto 0 0;
+	padding: .5rem .65rem;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	background: rgba(0, 0, 0, .28);
+	color: #d7dee6;
+	font-family: var(--mono);
+	font-size: .8rem;
+	line-height: 1.55;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.readout.empty {
+	color: var(--muted);
+	font-style: italic;
+}
+
+/* Status strip: last render proves the dispatcher is alive, viewport proves the composition surface fills the window. */
+.statusbar {
+	display: flex;
+	align-items: baseline;
+	gap: 1.25rem;
+	padding: .4rem 1.5rem;
+	border-top: 1px solid var(--line);
+	background: rgba(0, 0, 0, .3);
+	font-family: var(--mono);
+	font-size: .78rem;
+	color: #c6ced7;
+}
+
+.statusbar .stat {
+	display: flex;
+	align-items: baseline;
+	gap: .35rem;
+}
+
+.statusbar .label {
+	color: var(--muted);
+	font-size: .72rem;
+	letter-spacing: .02em;
+}
+
+#blazor-error-ui {
+	display: none;
+	position: fixed;
+	inset: auto 0 0 0;
+	padding: .6rem 1rem;
+	background: #7a1f1f;
+	color: #fff;
+}
+
+#blazor-error-ui .dismiss {
+	cursor: pointer;
+	position: absolute;
+	right: .75rem;
+	bottom: .6rem;
+}
+
+/* Custom chrome: mousedown on the bar starts the native move loop; the buttons stop propagation so they click
+   instead of dragging. Row one of the body grid, above the page shell and the status strip. */
+.titlebar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 40px;
+	padding-left: 12px;
+	user-select: none;
+	background: rgba(0, 0, 0, .35);
+	border-bottom: 1px solid var(--line);
+}
+
+.titlebar .title {
+	font-size: .82rem;
+	color: var(--muted);
+	letter-spacing: .01em;
+}
+
+.caption-buttons {
+	display: flex;
+	height: 100%;
+}
+
+button.caption {
+	width: 46px;
+	height: 100%;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--muted);
+	font-size: .8rem;
+	line-height: 1;
+}
+
+button.caption:hover { background: rgba(255, 255, 255, .08); color: var(--ink); }
+button.caption.close:hover { background: #c42b1c; color: #fff; }
+

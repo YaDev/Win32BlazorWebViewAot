@@ -1,0 +1,27 @@
+@inject AppWindow Window
+
+<div class="titlebar"
+     @onmousedown="Window.BeginDrag"
+     @ondblclick="Window.ToggleMaximize">
+	<span class="title">Win32BlazorWebViewAot Sample</span>
+	<div class="caption-buttons" @onmousedown:stopPropagation="true">
+		<button class="caption" aria-label="Minimize" @onclick="Window.Minimize">&#x1F5D5;</button>
+		<button class="caption" aria-label="Maximize or restore" @onclick="Window.ToggleMaximize">&#x25A1;</button>
+		<button class="caption close" aria-label="Close" @onclick="Window.Close">&#x2715;</button>
+	</div>
+</div>
+
+<Router AppAssembly="@typeof(App).Assembly">
+	<Found Context="routeData">
+		<RouteView RouteData="@routeData" />
+	</Found>
+	<NotFound>
+		<PageTitle>Not found</PageTitle>
+		<div class="shell" role="alert">
+			<header class="masthead">
+				<h1>Nothing is routed here</h1>
+				<p>Use an address the router knows, or go back to <a class="link" href="/">Home</a>.</p>
+			</header>
+		</div>
+	</NotFound>
+</Router>

@@ -1,0 +1,27 @@
+@page "/second"
+
+<PageTitle>Second page</PageTitle>
+
+<div class="shell">
+	<header class="masthead">
+		<h1>Second page</h1>
+		<p>
+			Reaching this address proves client routing works and that the host-page fallback answers a document request for a
+			path with no file behind it. The window, its caption and its message loop are untouched by navigation.
+		</p>
+	</header>
+
+	<div class="cards">
+		<section class="card">
+			<h2>Back home</h2>
+			<p class="note">The link is a plain anchor; the router handles it inside this window.</p>
+			<div class="row">
+				<a class="link" href="/">Home</a>
+			</div>
+		</section>
+	</div>
+</div>
+
+<footer class="statusbar">
+	<span class="stat"><span class="label">Route</span><span class="value">/second</span></span>
+</footer>

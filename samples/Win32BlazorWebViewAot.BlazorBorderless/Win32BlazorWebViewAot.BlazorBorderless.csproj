@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!--
+    A package reference would import these build files automatically; a ProjectReference does not. They carry the
+    trimming/AOT defaults (reflection-based JSON for Blazor IPC, partial trim mode) that an AOT publish needs — without
+    them the app faults at the first IPC frame with "Reflection-based serialization has been disabled".
+  -->
+  <Import Project="..\..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.props" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- Same floor as the library: the window uses the projected Windows.UI.Composition types. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Win32BlazorWebViewAot.BlazorBorderless</RootNamespace>
+    <AssemblyName>Win32BlazorWebViewAot.BlazorBorderless</AssemblyName>
+
+    <!--
+      Publish with -p:PublishAot=true to exercise the Native AOT path. Kept off for a normal build so the
+      inner loop stays fast.
+    -->
+    <SelfContained Condition="'$(PublishAot)' == 'true'">true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- The sample is a test surface, not shipped API: analyzer noise from Razor-generated code is not actionable here. -->
+    <NoWarn>$(NoWarn);BL0200;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Win32BlazorWebViewAot\Win32BlazorWebViewAot.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The host reads static content from disk next to the exe (HostPageLocator roots at AppContext.BaseDirectory).
+      Razor SDK treats wwwroot as static web assets, which never land in a console/WinExe bin folder on their own,
+      so mark the implicit items for copy — this is also what makes `dotnet publish` place wwwroot/ beside the AOT
+      executable. Update (not Include): the SDK already includes these files, re-including fails with NETSDK1022.
+    -->
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
+  </ItemGroup>
+
+  <Import Project="..\..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.targets" />
+
+</Project>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Win32BlazorWebViewAot Title Bar Sample</title>
+	<base href="/" />
+	<link rel="stylesheet" href="css/app.css" />
+</head>
+
+<body>
+	<!--
+	  Windows draws the title bar for this window, so there is nothing here but a toolbar: no drag region, no caption
+	  buttons. Move it by dragging the OS caption above; min/max/close and snap layouts are the system's own.
+	-->
+	<header class="toolbar">
+		<span class="brand">Title Bar Sample</span>
+		<span class="hint">the bar above is drawn by Windows — this one is just a toolbar</span>
+	</header>
+
+	<main class="page">
+		<h1>A normal Windows window, no Razor</h1>
+		<p class="lede">
+			Same plain HTML and JS as the borderless sample, but built with the default <code>BlazorWebViewWindow</code>.
+			The client area starts below the caption, so the page never has to leave room for a title bar — and it must not
+			draw one of its own.
+		</p>
+
+		<div class="row">
+			<button class="primary" id="btn-count">Clicked 0 time(s)</button>
+			<button id="btn-viewport">Read viewport</button>
+			<a class="link" href="https://learn.microsoft.com/microsoft-edge/webview2/" target="_blank">WebView2 docs (external browser)</a>
+		</div>
+
+		<h2>Call into .NET</h2>
+		<p class="lede">
+			These buttons leave the page and run C# in <code>DotNetBridge.cs</code> through
+			<code>DotNet.invokeMethodAsync</code>. Even the machine name — a synchronous C# method — comes back as a promise:
+			the synchronous <code>DotNet.invokeMethod</code> is not implemented on this channel. The clock above keeps ticking
+			while a call is in flight, which is the point.
+		</p>
+		<div class="row">
+			<button id="btn-machine">Machine name (plain value)</button>
+			<button id="btn-sum">Sum 21 + 21 (arguments)</button>
+			<button id="btn-facts">Runtime facts (several values)</button>
+		</div>
+
+		<pre id="readout" hidden></pre>
+		<p class="fineprint">JS clock: <span id="clock">--:--:--</span> — a ticking clock proves script is alive.</p>
+	</main>
+
+	<script src="_framework/blazor.webview.js" autostart="false"></script>
+	<script src="js/app.js"></script>
+</body>
+
+</html>

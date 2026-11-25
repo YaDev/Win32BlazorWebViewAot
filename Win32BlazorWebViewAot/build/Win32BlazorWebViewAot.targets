@@ -1,0 +1,264 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!--
+    Applied on package install (the file is named after the package so MSBuild imports it automatically).
+  -->
+
+  <PropertyGroup>
+    <!-- The browser asks for "/_framework/blazor.webview.js", so static assets are served from the site root. -->
+    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+    <StaticWebAssetProjectMode>Root</StaticWebAssetProjectMode>
+
+    <!-- A plain `dotnet publish` of a WinExe does not run the static-web-assets preparation on its own. -->
+    <CoreCompileDependsOn Condition="'$(PublishProtocol)' == 'FileSystem'">$(CoreCompileDependsOn);StaticWebAssetsPrepareForRun</CoreCompileDependsOn>
+  </PropertyGroup>
+
+  <!--
+    Roots the generic JSON converter instantiations Blazor's reflection-based IPC needs under NativeAOT. Set
+    Win32BlazorWebViewAotDisableRdXml=true to opt out once the app supplies source-generated serialization instead.
+  -->
+  <ItemGroup Condition="'$(PublishAot)' == 'true' and '$(Win32BlazorWebViewAotDisableRdXml)' != 'true'">
+    <RdXmlFile Include="$(MSBuildThisFileDirectory)rd.xml" />
+  </ItemGroup>
+
+  <!--
+    ============================ Content inside the executable ============================
+
+    A desktop app that ships as one file has to carry its own HTML. Without this, `dotnet publish` leaves a wwwroot folder
+    beside the exe and the app is that folder plus the binary: copy the exe alone and it opens on "host page not found".
+
+    The application's static web assets are compiled into the assembly as resources whose logical name is the site path with
+    dots for separators — wwwroot.index.html, wwwroot._framework.blazor.webview.js — which is exactly the shape
+    EmbeddedFileProvider reads. BlazorWebView serves those ahead of the files on disk (see EmbeddedContent.cs).
+
+    Taking the assets from @(StaticWebAsset) rather than globbing wwwroot is what makes this complete: that list also holds
+    _framework/blazor.webview.js and blazor.modules.json, which come out of Microsoft.AspNetCore.Components.WebView and are
+    the two files a Razor app cannot start without. A project that has no static web assets at all — plain HTML and JS on
+    Microsoft.NET.Sdk — gets the folder globbed instead.
+
+    Opt out with Win32BlazorWebViewAotEmbedContent=false to keep content as loose files only.
+  -->
+  <!--
+    Debug builds deliberately do not embed: a debugging session reads the
+    page off disk, so editing HTML or CSS and reloading shows the edit instead of the bytes baked in at the last build.
+    Publish — and a Release build, which is what gets packaged — carries its content inside the exe.
+  -->
+  <PropertyGroup>
+    <Win32BlazorWebViewAotEmbedContent Condition="'$(Win32BlazorWebViewAotEmbedContent)' == '' and ('$(_IsPublishing)' == 'true' or '$(Configuration)' == 'Release')">true</Win32BlazorWebViewAotEmbedContent>
+    <Win32BlazorWebViewAotEmbedContent Condition="'$(Win32BlazorWebViewAotEmbedContent)' == ''">false</Win32BlazorWebViewAotEmbedContent>
+
+    <!-- Resource folder the content is embedded under; BlazorWebView.EmbeddedContentBaseFolder has to match it. -->
+    <Win32BlazorWebViewAotEmbeddedBaseFolder Condition="'$(Win32BlazorWebViewAotEmbeddedBaseFolder)' == ''">wwwroot</Win32BlazorWebViewAotEmbeddedBaseFolder>
+
+    <!-- On-disk folder globbed when the project produces no static web assets. -->
+    <Win32BlazorWebViewAotContentRoot Condition="'$(Win32BlazorWebViewAotContentRoot)' == ''">wwwroot</Win32BlazorWebViewAotContentRoot>
+
+  </PropertyGroup>
+
+  <!--
+    Static web assets, which is the complete set: the project's own content plus what its packages contribute. Globbed inside
+    the target rather than in a static ItemGroup because the items do not exist at evaluation time — computed assets such as
+    scoped-CSS bundles are produced during the build.
+
+    Only a Razor SDK project has these targets; asking a plain Microsoft.NET.Sdk app for ResolveStaticWebAssetsInputs stops
+    the build with MSBuild error MSB4057, hence StaticWebAssetsEnabled — which only that SDK defines — deciding between this
+    path and the folder glob below.
+  -->
+  <!--
+    Hooked before SplitResourcesByCulture, not before CoreCompile: that is where the SDK partitions @(EmbeddedResource) into
+    the lists csc is handed, so items added later are silently dropped — a green build whose exe carries nothing, which is the
+    bug this target exists to fix.
+  -->
+  <Target Name="Win32BlazorWebViewAotEmbedStaticWebAssets"
+          DependsOnTargets="ResolveStaticWebAssetsInputs"
+          BeforeTargets="SplitResourcesByCulture"
+          Condition="'$(Win32BlazorWebViewAotEmbedContent)' == 'true' and '$(StaticWebAssetsEnabled)' == 'true'">
+
+    <ItemGroup>
+      <!-- Alternatives (the .gz/.br copies a web server negotiates) are addressable at their primary's path, so embedding
+           them would only double the size of the exe. -->
+      <_Win32BlazorWebViewAotEmbeddableAsset Include="@(StaticWebAsset)" Condition="'%(StaticWebAsset.AssetRole)' == 'Primary'" />
+    </ItemGroup>
+
+    <!-- RelativePath carries fingerprint tokens (app#[.{fingerprint}]?.css); the SDK task resolves them to the real name. -->
+    <ComputeStaticWebAssetsTargetPaths Assets="@(_Win32BlazorWebViewAotEmbeddableAsset)" PathPrefix="$(Win32BlazorWebViewAotEmbeddedBaseFolder)">
+      <Output TaskParameter="AssetsWithTargetPath" ItemName="_Win32BlazorWebViewAotEmbeddedAsset" />
+    </ComputeStaticWebAssetsTargetPaths>
+
+    <ItemGroup>
+      <EmbeddedResource Include="@(_Win32BlazorWebViewAotEmbeddedAsset)">
+        <LogicalName>$([System.String]::Copy('%(TargetPath)').Replace('\', '.').Replace('/', '.'))</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+
+    <PropertyGroup>
+      <!-- Says the content is in, so the folder glob below stays out of projects this target already handled. -->
+      <Win32BlazorWebViewAotContentEmbedded>true</Win32BlazorWebViewAotContentEmbedded>
+    </PropertyGroup>
+
+    <Message Importance="High"
+             Text="Win32BlazorWebViewAot: embedded @(_Win32BlazorWebViewAotEmbeddedAsset->Count()) static web assets as '$(Win32BlazorWebViewAotEmbeddedBaseFolder).&lt;path&gt;' resources." />
+  </Target>
+
+  <!--
+    ============================ The JavaScript side of Blazor for plain HTML apps ============================
+
+    window.DotNet.invokeMethod / invokeMethodAsync reach a [JSInvokable] method only if the page loaded
+    _framework/blazor.webview.js. A Razor project gets that file from Microsoft.AspNetCore.Components.WebView's own static web
+    assets; a plain Microsoft.NET.Sdk app has no static web asset pipeline at all, so the request 404s and window.DotNet never
+    exists — an HTML page can then talk to the window but not to .NET.
+
+    This puts the file where this library's own file provider looks for it: copied into wwwroot\_framework for a development
+    build that reads content off disk, and embedded under the same site path for a build that carries its content inside the
+    exe. The source is found through the resolved assembly reference of Microsoft.AspNetCore.Components.WebView — Identity with
+    PathInPackage stripped is that package's root — so the copy always matches the version actually referenced.
+
+    Opt out with Win32BlazorWebViewAotProvideBlazorWebViewJs=false to serve, bundle, or stub the file yourself.
+  -->
+  <PropertyGroup>
+    <Win32BlazorWebViewAotProvideBlazorWebViewJs Condition="'$(Win32BlazorWebViewAotProvideBlazorWebViewJs)' == ''">true</Win32BlazorWebViewAotProvideBlazorWebViewJs>
+  </PropertyGroup>
+
+  <Target Name="Win32BlazorWebViewAotAddBlazorWebViewJs"
+          BeforeTargets="SplitResourcesByCulture;AssignTargetPaths"
+          Condition="'$(Win32BlazorWebViewAotProvideBlazorWebViewJs)' == 'true' and '$(StaticWebAssetsEnabled)' != 'true'">
+
+    <ItemGroup>
+      <_Win32BlazorWebViewAotWebViewPackageReference Include="@(ReferencePath)"
+                                        Condition="'%(Filename)' == 'Microsoft.AspNetCore.Components.WebView'" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <!-- The referenced assembly sits at <package root>\lib\<tfm>\Microsoft.AspNetCore.Components.WebView.dll, so three
+           directory steps up from it is the package — which always matches the version actually being used. Its JavaScript
+           lives in staticwebassets\ (blazor.webview.js and blazor.modules.json), served under _framework/. -->
+      <_Win32BlazorWebViewAotWebViewPackageRoot Condition="'%(_Win32BlazorWebViewAotWebViewPackageReference.Identity)' != ''">$([System.IO.Path]::GetDirectoryName($([System.IO.Path]::GetDirectoryName($([System.IO.Path]::GetDirectoryName('%(_Win32BlazorWebViewAotWebViewPackageReference.Identity)'))))))</_Win32BlazorWebViewAotWebViewPackageRoot>
+      <_Win32BlazorWebViewAotWebViewStaticAssets Condition="'$(_Win32BlazorWebViewAotWebViewPackageRoot)' != ''">$([MSBuild]::NormalizeDirectory('$(_Win32BlazorWebViewAotWebViewPackageRoot)', 'staticwebassets'))</_Win32BlazorWebViewAotWebViewStaticAssets>
+    </PropertyGroup>
+
+    <ItemGroup Condition="Exists('$(_Win32BlazorWebViewAotWebViewStaticAssets)')">
+      <_Win32BlazorWebViewAotBlazorWebViewAsset Include="$(_Win32BlazorWebViewAotWebViewStaticAssets)\*" />
+    </ItemGroup>
+
+    <Warning Condition="'%(_Win32BlazorWebViewAotWebViewPackageReference.Identity)' == ''"
+             Text="Win32BlazorWebViewAot: no reference to Microsoft.AspNetCore.Components.WebView was found, so _framework/blazor.webview.js cannot be supplied. JavaScript calls into [JSInvokable] methods will not work." />
+    <Warning Condition="'%(_Win32BlazorWebViewAotWebViewPackageReference.Identity)' != '' and '@(_Win32BlazorWebViewAotBlazorWebViewAsset)' == ''"
+             Text="Win32BlazorWebViewAot: expected the WebView JavaScript under '$(_Win32BlazorWebViewAotWebViewStaticAssets)' but found nothing there." />
+
+    <ItemGroup Condition="'@(_Win32BlazorWebViewAotBlazorWebViewAsset)' != ''">
+      <!-- Development: the page reads it from disk, exactly like the rest of wwwroot. -->
+      <Content Include="@(_Win32BlazorWebViewAotBlazorWebViewAsset)"
+               Link="$(Win32BlazorWebViewAotContentRoot)\_framework\%(_Win32BlazorWebViewAotBlazorWebViewAsset.Filename)%(_Win32BlazorWebViewAotBlazorWebViewAsset.Extension)"
+               CopyToOutputDirectory="PreserveNewest" />
+
+      <!-- Publish/Release: same site path inside the exe, so a single-file app can answer the request too. -->
+      <EmbeddedResource Include="@(_Win32BlazorWebViewAotBlazorWebViewAsset)"
+                        Condition="'$(Win32BlazorWebViewAotEmbedContent)' == 'true'">
+        <LogicalName>$(Win32BlazorWebViewAotEmbeddedBaseFolder)._framework.%(_Win32BlazorWebViewAotBlazorWebViewAsset.Filename)%(_Win32BlazorWebViewAotBlazorWebViewAsset.Extension)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+
+    <Message Importance="High" Condition="'@(_Win32BlazorWebViewAotBlazorWebViewAsset)' != ''"
+             Text="Win32BlazorWebViewAot: supplying @(_Win32BlazorWebViewAotBlazorWebViewAsset->Count()) file(s) as _framework/* for JS interop ('$(_Win32BlazorWebViewAotWebViewStaticAssets)')." />
+  </Target>
+
+  <!--
+    The fallback for a project with no static web assets: plain HTML and JS on Microsoft.NET.Sdk, where wwwroot is ordinary
+    content. Same logical names, so the runtime path through EmbeddedFileProvider is identical.
+  -->
+  <Target Name="Win32BlazorWebViewAotEmbedContentFolder"
+          DependsOnTargets="Win32BlazorWebViewAotEmbedStaticWebAssets;Win32BlazorWebViewAotAddBlazorWebViewJs"
+          BeforeTargets="SplitResourcesByCulture"
+          Condition="'$(Win32BlazorWebViewAotEmbedContent)' == 'true' and '$(Win32BlazorWebViewAotContentEmbedded)' != 'true' and Exists('$(Win32BlazorWebViewAotContentRoot)')">
+
+    <ItemGroup>
+      <!-- Glob into a private item first: an Include with both a wildcard and %() metadata in one step does not batch the way it reads. -->
+      <_Win32BlazorWebViewAotContentFile Include="$(Win32BlazorWebViewAotContentRoot)\**\*" Exclude="$(Win32BlazorWebViewAotContentRoot)\**\*.gz;$(Win32BlazorWebViewAotContentRoot)\**\*.br" />
+      <EmbeddedResource Include="@(_Win32BlazorWebViewAotContentFile)">
+        <LogicalName>$(Win32BlazorWebViewAotEmbeddedBaseFolder).$([MSBuild]::ValueOrDefault('%(RecursiveDir)', '').Replace('\', '.').Replace('/', '.'))%(Filename)%(Extension)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+
+    <!-- Editing a page has to mark the project out of date, or F5 relaunches the exe with the previous content still baked in. -->
+    <ItemGroup>
+      <UpToDateCheckInput Include="@(_Win32BlazorWebViewAotContentFile)" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <Win32BlazorWebViewAotContentEmbedded>true</Win32BlazorWebViewAotContentEmbedded>
+    </PropertyGroup>
+
+    <Message Importance="High"
+             Text="Win32BlazorWebViewAot: embedded @(_Win32BlazorWebViewAotContentFile->Count()) files from $(Win32BlazorWebViewAotContentRoot) as '$(Win32BlazorWebViewAotEmbeddedBaseFolder).&lt;path&gt;' resources." />
+  </Target>
+
+  <!--
+    Content that ships inside the exe must not also ship beside it: a duplicate tree invites the question of which one the app
+    reads, and an old copy left in an output folder is the version nobody tested. The runtime prefers the embedded bytes, so
+    removing the loose ones makes the published layout agree with what actually runs.
+  -->
+  <!--
+    Static web assets do not travel through ResolvedFileToPublish: the SDK splits them by copy option and copies each list
+    itself, so this has to intervene on those lists. Hooked before the three copy targets rather than after
+    ComputeFilesToPublish, where removing items changed nothing.
+  -->
+  <Target Name="Win32BlazorWebViewAotSuppressEmbeddedContentFromPublish"
+          BeforeTargets="_PublishCopyStaticWebAssetsPreserveNewest;_PublishCopyStaticWebAssetsAlways;_PublishCopyStaticWebAssetsIfDifferent"
+          Condition="'$(Win32BlazorWebViewAotEmbedContent)' == 'true'">
+
+    <ItemGroup>
+      <_PublishStaticWebAssetsPreserveNewest Remove="@(_PublishStaticWebAssetsPreserveNewest)"
+                                             Condition="$([System.String]::Copy('%(TargetPath)').Replace('\', '/').StartsWith('$(Win32BlazorWebViewAotEmbeddedBaseFolder)/'))" />
+      <_PublishStaticWebAssetsCopyAlways Remove="@(_PublishStaticWebAssetsCopyAlways)"
+                                         Condition="$([System.String]::Copy('%(TargetPath)').Replace('\', '/').StartsWith('$(Win32BlazorWebViewAotEmbeddedBaseFolder)/'))" />
+      <_PublishStaticWebAssetsIfDifferent Remove="@(_PublishStaticWebAssetsIfDifferent)"
+                                          Condition="$([System.String]::Copy('%(TargetPath)').Replace('\', '/').StartsWith('$(Win32BlazorWebViewAotEmbeddedBaseFolder)/'))" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    A project without static web assets — plain HTML and JS on Microsoft.NET.Sdk — publishes its content as ordinary
+    content, which is a different list. Both paths are covered so the published layout looks the same either way.
+  -->
+  <Target Name="Win32BlazorWebViewAotRemoveEmbeddedContentFromPublish"
+          AfterTargets="ComputeFilesToPublish"
+          Condition="'$(Win32BlazorWebViewAotEmbedContent)' == 'true'">
+
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="$([System.String]::Copy('%(RelativePath)').Replace('\', '/').StartsWith('$(Win32BlazorWebViewAotEmbeddedBaseFolder)/'))" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    The native loader, same idea as the content above: once this assembly carries the publish architecture's copy, the loose
+    runtimes\win-<arch>\native\WebView2Loader.dll is a second copy of a file the exe already has. Only that file is removed —
+    a self-contained JIT publish puts real dependencies under runtimes\, and those must stay.
+  -->
+  <PropertyGroup>
+    <!-- Matches the library, which embeds unconditionally: a RuntimeIdentifier is not needed to decide this. -->
+    <Win32BlazorWebViewAotEmbedWebView2Loader Condition="'$(Win32BlazorWebViewAotEmbedWebView2Loader)' == ''">true</Win32BlazorWebViewAotEmbedWebView2Loader>
+  </PropertyGroup>
+
+  <Target Name="Win32BlazorWebViewAotRemoveEmbeddedLoaderFromPublish"
+          AfterTargets="ComputeFilesToPublish"
+          Condition="'$(Win32BlazorWebViewAotEmbedWebView2Loader)' == 'true'">
+
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Filename)%(Extension)' == 'WebView2Loader.dll'" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    The endpoints manifest describes assets on disk. Nothing reads it: a desktop app has no ASP.NET Core host to consult it,
+    and the content it indexes is inside the exe.
+  -->
+  <Target Name="Win32BlazorWebViewAotRemoveEndpointsManifestFromPublish"
+          AfterTargets="CopyStaticWebAssetsEndpointsManifest;Publish"
+          Condition="'$(Win32BlazorWebViewAotEmbedContent)' == 'true' and Exists('$(PublishDir)$(TargetName).staticwebassets.endpoints.json')">
+
+    <Delete Files="$(PublishDir)$(TargetName).staticwebassets.endpoints.json" />
+  </Target>
+
+</Project>

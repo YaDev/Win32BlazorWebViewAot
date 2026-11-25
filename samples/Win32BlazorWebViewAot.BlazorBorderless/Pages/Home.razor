@@ -1,0 +1,117 @@
+@page "/"
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Home</PageTitle>
+
+<div class="shell">
+	<header class="masthead">
+		<h1>Win32BlazorWebViewAot</h1>
+		<p>
+			Razor components in a borderless Win32 window, rendered through <code>ICoreWebView2CompositionController</code>. The
+			surface behind this text reaches the physical window edge on every side — any gutter is a bug — and the
+			title bar above it is drawn by <code>App.razor</code>, not by Windows.
+		</p>
+	</header>
+
+	<div class="cards">
+		<section class="card">
+			<h2>IJSRuntime: .NET calls JS</h2>
+			<p class="note">The component invokes JavaScript in the page and reads the value it returns.</p>
+			<div class="row">
+				<button class="primary" @onclick="IncrementAsync">Clicked @count time(s)</button>
+				<button @onclick="ReadViewportAsync">Read viewport</button>
+			</div>
+			<pre class="readout@(title is null ? " empty" : "")">@TitleText</pre>
+		</section>
+
+		<section class="card">
+			<h2>[JSInvokable]: JS calls .NET</h2>
+			<p class="note">
+				Inline script in <code>index.html</code> calls the static <code>GetAppInfo</code> in <code>DotNetBridge.cs</code>.
+				.NET answers through an event, so this list is rendered by Blazor like everything else.
+			</p>
+			<div class="row">
+				<button id="btn-bridge">Ask .NET from raw JS</button>
+			</div>
+			<pre class="readout@(calls.Count == 0 ? " empty" : "")">@BridgeLog</pre>
+		</section>
+
+		<section class="card">
+			<h2>Routing inside the window</h2>
+			<p class="note">An internal link stays in this window; an external one opens the default browser.</p>
+			<div class="row">
+				<a class="link" href="/second">Second page</a>
+				<a class="link" href="https://learn.microsoft.com/aspnet/core/blazor" target="_blank">Blazor docs (new window)</a>
+			</div>
+			<pre class="readout">address @Nav.Uri</pre>
+		</section>
+
+		<section class="card">
+			<h2>This page draws the title bar</h2>
+			<p class="note">
+				Mousedown on the bar calls <code>Win32Window.BeginDrag()</code>, so Windows runs its own move loop; the caption
+				buttons minimize, maximize and close through the injected <code>AppWindow</code>. Drag any edge to resize.
+			</p>
+			<pre class="readout">caption: App.razor draws it · window: BorderlessBlazorWebViewWindow</pre>
+		</section>
+	</div>
+</div>
+
+<footer class="statusbar">
+	<span class="stat"><span class="label">Last render</span><span class="value">@rendered</span></span>
+	@if (viewport is not null)
+	{
+		<span class="stat"><span class="label">Client area</span><span class="value">@viewport</span></span>
+	}
+</footer>
+
+@code {
+	private int count;
+	private string? title;
+	private string? viewport;
+	private readonly List<string> calls = [];
+	private string rendered = DateTime.Now.ToString("HH:mm:ss");
+
+	private string TitleText =>
+		title is null ? "Nothing called yet." : $"document.title → «{title}»";
+
+	private string BridgeLog =>
+		calls.Count == 0 ? "No call has arrived from JavaScript yet." : string.Join('\n', calls);
+
+	protected override void OnInitialized() => DotNetBridge.InfoReturned += OnInfoReturned;
+
+	public void Dispose() => DotNetBridge.InfoReturned -= OnInfoReturned;
+
+	// The [JSInvokable] call arrives on the renderer's synchronization context, but going through InvokeAsync keeps this
+	// correct even if .NET raises the event from another thread later on.
+	private void OnInfoReturned(string info) => _ = InvokeAsync(() =>
+	{
+		calls.Add(info);
+		if (calls.Count > 5)
+		{
+			calls.RemoveAt(0);
+		}
+
+		StateHasChanged();
+	});
+
+	private async Task IncrementAsync()
+	{
+		count++;
+		rendered = DateTime.Now.ToString("HH:mm:ss");
+
+		// One eval does two things: write document.title, then hand it back so the readout proves the value crossed
+		// the boundary instead of being invented in C#. The call round-trips through the window.external bridge.
+		title = await JS.InvokeAsync<string>("eval",
+			$"document.title = 'Win32BlazorWebViewAot Sample — clicks {count}'; document.title");
+	}
+
+	private async Task ReadViewportAsync()
+	{
+		viewport = await JS.InvokeAsync<string>("eval",
+			"window.innerWidth + 'x' + window.innerHeight + ' at dpr ' + window.devicePixelRatio");
+		rendered = DateTime.Now.ToString("HH:mm:ss");
+	}
+}

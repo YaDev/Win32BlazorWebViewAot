@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A plain HTML + JS application: no Razor, no components. The window is still a Win32BlazorWebViewAot host — the
+    browser renders wwwroot/index.html and talks to .NET through chrome.webview.postMessage — which proves the host is
+    useful on its own, not only as a Blazor carrier.
+  -->
+
+  <Import Project="..\..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.props" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Platforms>x64;x86;ARM64</Platforms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>false</ImplicitUsings>
+    <RootNamespace>Win32BlazorWebViewAot.HtmlBorderless</RootNamespace>
+    <AssemblyName>Win32BlazorWebViewAot.HtmlBorderless</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Win32BlazorWebViewAot\Win32BlazorWebViewAot.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The host page and its assets are read from disk next to the executable, like any other HostPage content. -->
+    <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Import Project="..\..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.targets" />
+
+</Project>

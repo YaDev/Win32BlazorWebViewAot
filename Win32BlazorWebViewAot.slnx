@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="Win32BlazorWebViewAot/Win32BlazorWebViewAot.csproj" />
+  <Project Path="tests/LifetimeTests.Components/LifetimeTests.Components.csproj" />
+  <Project Path="tests/Win32BlazorWebViewAot.LifetimeTests/Win32BlazorWebViewAot.LifetimeTests.csproj" />
+  <Project Path="samples/Win32BlazorWebViewAot.Html/Win32BlazorWebViewAot.Html.csproj" />
+  <Project Path="samples/Win32BlazorWebViewAot.Blazor/Win32BlazorWebViewAot.Blazor.csproj" />
+  <Project Path="samples/Win32BlazorWebViewAot.BlazorBorderless/Win32BlazorWebViewAot.BlazorBorderless.csproj" />
+  <Project Path="samples/Win32BlazorWebViewAot.HtmlBorderless/Win32BlazorWebViewAot.HtmlBorderless.csproj" />
+</Solution>

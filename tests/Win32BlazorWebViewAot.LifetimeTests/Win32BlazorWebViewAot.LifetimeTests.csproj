@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!--
+    The lifetime harness asks for: real windows, real WebView2, the ten shutdown scenarios, run
+    both under the JIT and as a Native AOT executable. Exit code 0 means every scenario passed.
+
+    A console host rather than a unit-test framework: the scenarios must keep pumping Win32 messages while they await, and
+    a test-host process owns the message loop in ways that make "close the window mid-initialization" impossible to drive.
+  -->
+
+  <!-- The same trimming / AOT defaults a NuGet consumer gets from the package's build folder. -->
+  <Import Project="..\..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.props" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Same floor as the library: the windows use the projected Windows.UI.Composition types. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Win32BlazorWebViewAot.LifetimeTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+
+    <!--
+      CI runs the scenarios both with the JIT and as a Native AOT executable. PublishAot stays off in a
+      normal build so the inner loop is a fast framework-dependent exe; pass -p:PublishAot=true to publish the AOT one.
+    -->
+    <SelfContained Condition="'$(PublishAot)' == 'true'">true</SelfContained>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Razor-generated code is not analyzer-clean; the sample records the same exemption. -->
+    <NoWarn>$(NoWarn);BL2000;CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Win32BlazorWebViewAot\Win32BlazorWebViewAot.csproj" />
+    <ProjectReference Include="..\LifetimeTests.Components\LifetimeTests.Components.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The host page must sit next to the exe; Razor static web assets never land in a console bin folder.
+         Update (not Include): the SDK already includes these files, re-including fails with NETSDK1022. -->
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Import Project="..\..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.targets" />
+
+</Project>

@@ -1,0 +1,96 @@
+@*
+    The component the lifetime scenarios open, close and leave behind. It starts work in OnInitializedAsync and keeps it
+    running after the window may be gone: that is the whole point pending of the plan tasks must complete or fault
+    correctly rather than take the process with them.
+
+    Shape follows the repro in dotnet/maui#34855 (async work + InvokeAsync + DispatchExceptionAsync across teardown),
+    written for this host; no code was copied from anywhere.
+*@
+@inject IJSRuntime JS
+
+@if (_loading)
+{
+    <p>Working… close the window now.</p>
+}
+else
+{
+    <p>done</p>
+}
+
+@code {
+	private bool _loading;
+
+	/// <summary>How long the work runs before it reports back.</summary>
+	[Parameter] public int Delay { get; set; } = 3000;
+
+	/// <summary>Whether to fail on purpose, so failure reporting during shutdown is exercised as well.</summary>
+	[Parameter] public bool ThrowException { get; set; }
+
+	/// <summary>Whether to await a JavaScript call of the same length, closing mid-interop.</summary>
+	[Parameter] public bool AwaitJsInterop { get; set; }
+
+	protected override Task OnInitializedAsync()
+	{
+		_loading = true;
+
+		// Fire-and-forget on purpose: a component must not block its own render on work that outlives it, and the scenario
+		// needs the window to be closable while the task is still running.
+		_ = RunAsync();
+
+		return Task.CompletedTask;
+	}
+
+	private async Task RunAsync()
+	{
+		await InvokeAsync(StateHasChanged);
+		BackgroundWorkState.IncrementStarted();
+
+		try
+		{
+			if (AwaitJsInterop)
+			{
+				// A promise the page resolves later: the .NET side is parked inside JS interop when the window closes.
+				BackgroundWorkState.IncrementJsStarted();
+				await JS.InvokeAsync<int>(
+					"eval",
+					$$"""new Promise(resolve => setTimeout(() => resolve({{Delay}}), {{Delay}}))""");
+				BackgroundWorkState.IncrementJsFinished();
+			}
+			else
+			{
+				await Task.Delay(Delay);
+			}
+
+			if (ThrowException)
+			{
+				throw new InvalidOperationException("The background work failed on purpose.");
+			}
+		}
+		catch (Exception exception)
+		{
+			// A component that fails after its view is gone has nowhere to report: the renderer would reject it, and an
+			// unhandled failure on the dispatcher is exactly what crashes a real app. So the failure is recorded here — the
+			// scenario asserts it was observed rather than swallowed silently.
+			BackgroundWorkState.LastFailure = $"{exception.GetType().Name}: {exception.Message}";
+		}
+		finally
+		{
+			_loading = false;
+
+			try
+			{
+				await InvokeAsync(StateHasChanged);
+			}
+			catch (Exception renderFailure)
+			{
+				// Expected once the renderer is disposed: the component has nowhere left to paint.
+				BackgroundWorkState.LastFailure ??=
+					$"{renderFailure.GetType().Name}: {renderFailure.Message}";
+			}
+			finally
+			{
+				BackgroundWorkState.IncrementFinished();
+			}
+		}
+	}
+}

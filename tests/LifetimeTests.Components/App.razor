@@ -1,0 +1,39 @@
+@*
+    Root component of every lifetime scenario. The ErrorBoundary matters: DispatchExceptionAsync only has somewhere to
+    land when one exists, which is what makes "the view disappeared while the work was reporting a failure" observable
+    instead of fatal.
+*@
+@*
+    A transparent full-viewport layer whose only job is to count real clicks: scenario 11 sends genuine Win32 mouse
+    input at the window and asserts this counter moves, which proves the composition-hosted click path end to end.
+*@
+<div id="click-capture" style="position:fixed;inset:0;" @onclick="OnClick"></div>
+
+@*
+    A caption strip along the top edge: scenario 13 presses on it and drags, and its mousedown starts the window's
+    native move loop through WindowDragHook — the borderless-window equivalent of grabbing an OS title bar.
+*@
+<div id="drag-strip" style="position:fixed;top:0;left:0;right:0;height:40px;z-index:10;"
+     @onmousedown="() => WindowDragHook.BeginDrag?.Invoke()"></div>
+
+<ErrorBoundary>
+    <ChildContent>
+        <BackgroundWork Delay="Delay" ThrowException="ThrowException" AwaitJsInterop="AwaitJsInterop" />
+    </ChildContent>
+    <ErrorContent>
+        <p class="error-ui">The background work failed and the error boundary caught it.</p>
+    </ErrorContent>
+</ErrorBoundary>
+
+@code {
+	/// <summary>How long the component's background work runs before it reports back.</summary>
+	[Parameter] public int Delay { get; set; } = 3000;
+
+	/// <summary>Whether the background work fails on purpose, so failure reporting during shutdown is exercised too.</summary>
+	[Parameter] public bool ThrowException { get; set; }
+
+	/// <summary>Whether the background work also awaits a JavaScript call that takes as long as <see cref="Delay"/>.</summary>
+	[Parameter] public bool AwaitJsInterop { get; set; }
+
+	private void OnClick() => BackgroundWorkState.IncrementClicks();
+}

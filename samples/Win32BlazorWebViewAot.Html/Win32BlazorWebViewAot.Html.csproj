@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The same plain HTML + JS application as Win32BlazorWebViewAot.HtmlSample, but with the window's OWN title bar: it uses the
+    default BlazorWebViewWindow, so Windows draws the caption and the page has no drag region and no min/max/close
+    buttons. This is the sample for "I just want a normal Windows window".
+  -->
+
+  <Import Project="..\..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.props" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Platforms>x64;x86;ARM64</Platforms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>false</ImplicitUsings>
+    <RootNamespace>Win32BlazorWebViewAot.Html</RootNamespace>
+    <AssemblyName>Win32BlazorWebViewAot.Html</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Win32BlazorWebViewAot\Win32BlazorWebViewAot.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The host page and its assets are read from disk next to the executable, like any other HostPage content. -->
+    <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Import Project="..\..\Win32BlazorWebViewAot\build\Win32BlazorWebViewAot.targets" />
+
+</Project>

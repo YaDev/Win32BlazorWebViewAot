@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Win32BlazorWebViewAot HTML Sample</title>
+	<base href="/" />
+	<link rel="stylesheet" href="css/app.css" />
+</head>
+
+<body>
+	<!-- The window is borderless; this bar IS the title bar (drag to move, double-click to maximize). -->
+	<header id="titlebar">
+		<span class="title">Win32BlazorWebViewAot HTML Sample</span>
+		<div class="caption-buttons">
+			<button class="caption" id="btn-min" aria-label="Minimize">&#x1F5D5;</button>
+			<button class="caption" id="btn-max" aria-label="Maximize or restore">&#x25A1;</button>
+			<button class="caption close" id="btn-close" aria-label="Close">&#x2715;</button>
+		</div>
+	</header>
+
+	<main class="page">
+		<h1>No Razor, no components</h1>
+		<p class="lede">
+			Plain HTML and JS inside the same borderless composition window. The page talks to .NET through
+			<code>chrome.webview.postMessage</code>: mousedown on the bar above sends <code>win:drag</code> and Windows
+			runs its native move loop.
+		</p>
+
+		<div class="row">
+			<button class="primary" id="btn-count">Clicked 0 time(s)</button>
+			<button id="btn-viewport">Read viewport</button>
+			<a class="link" href="https://learn.microsoft.com/microsoft-edge/webview2/" target="_blank">WebView2 docs (external browser)</a>
+		</div>
+
+		<h2>Call into .NET</h2>
+		<p class="lede">
+			The caption above fires <code>chrome.webview.postMessage</code>: fire-and-forget strings, which is all a drag needs.
+			These buttons use the other channel instead — <code>DotNet.invokeMethodAsync</code>, into
+			<code>DotNetBridge.cs</code> — because they pass typed arguments and want a value back. Renaming the window proves it:
+			the caption that comes back is what .NET decided to set.
+		</p>
+		<div class="row">
+			<button id="btn-machine">Machine name (plain value)</button>
+			<button id="btn-sum">Sum 21 + 21 (arguments)</button>
+			<button id="btn-facts">Runtime facts (several values)</button>
+		</div>
+		<div class="row">
+			<input id="title-input" type="text" placeholder="New window title" size="24" />
+			<button id="btn-title">Rename window</button>
+		</div>
+
+		<pre id="readout" hidden></pre>
+		<p class="fineprint">JS clock: <span id="clock">--:--:--</span> — a ticking clock proves script is alive.</p>
+	</main>
+
+	<!--
+		The JavaScript half of Blazor, which is what puts window.DotNet on the page. autostart="false" because this page has no
+		components to render — app.js calls Blazor.start() itself. The file itself comes from the build (see
+		Win32BlazorWebViewAot.targets), not from a folder in this project.
+	-->
+	<script src="_framework/blazor.webview.js" autostart="false"></script>
+	<script src="js/app.js"></script>
+</body>
+
+</html>

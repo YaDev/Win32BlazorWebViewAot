@@ -1,0 +1,106 @@
+:root {
+	--ink: #e8edf3;
+	--muted: #9fb0c3;
+	--accent: #4ea1ff;
+	--panel: rgba(255, 255, 255, .06);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+	margin: 0;
+	height: 100%;
+	font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+	color: var(--ink);
+	background: #0d1524;
+}
+
+/* Edge-to-edge gradient check: any gutter at a window edge is a composition bug. */
+body {
+	background:
+		radial-gradient(120% 90% at 12% -10%, #1d3a6b 0%, transparent 60%),
+		radial-gradient(100% 80% at 100% 100%, #4a1f45 0%, transparent 55%),
+		#0d1524;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Custom chrome: mousedown here starts the native move loop (see js/app.js). */
+#titlebar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 40px;
+	flex: 0 0 auto;
+	padding-left: 12px;
+	user-select: none;
+	background: rgba(255, 255, 255, .04);
+}
+
+#titlebar .title {
+	font-size: .85rem;
+	color: var(--muted);
+	letter-spacing: .01em;
+}
+
+.caption-buttons { display: flex; height: 100%; }
+
+button.caption {
+	width: 46px;
+	height: 100%;
+	border: 0;
+	background: transparent;
+	color: var(--muted);
+	font-size: .8rem;
+	line-height: 1;
+	cursor: default;
+}
+
+button.caption:hover { background: rgba(255, 255, 255, .08); color: var(--ink); }
+button.caption.close:hover { background: #c42b1c; color: #fff; }
+
+.page {
+	padding: clamp(1.5rem, 4vw, 3rem);
+	max-width: 62rem;
+	flex: 1 1 auto;
+}
+
+h1 { margin: 0 0 .5rem; font-size: clamp(1.6rem, 3.4vw, 2.4rem); letter-spacing: -.02em; }
+
+.lede { max-width: 46rem; color: var(--muted); line-height: 1.65; }
+
+code {
+	font-family: "Cascadia Mono", ui-monospace, Consolas, monospace;
+	font-size: .92em;
+	padding: .1rem .35rem;
+	border-radius: 4px;
+	background: var(--panel);
+}
+
+.row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin: 1.25rem 0; }
+
+button.primary, button:not(.caption) {
+	padding: .5rem 1rem;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, .18);
+	background: var(--panel);
+	color: var(--ink);
+	font: inherit;
+	cursor: pointer;
+}
+
+button.primary { background: var(--accent); border-color: transparent; color: #06121f; font-weight: 600; }
+
+.link { color: var(--accent); text-decoration: none; }
+.link:hover { text-decoration: underline; }
+
+#readout {
+	padding: .75rem 1rem;
+	border-radius: 8px;
+	background: rgba(0, 0, 0, .35);
+	white-space: pre-wrap;
+	font-family: "Cascadia Mono", ui-monospace, Consolas, monospace;
+	font-variant-numeric: tabular-nums;
+}
+
+.fineprint { color: var(--muted); font-size: .82rem; }

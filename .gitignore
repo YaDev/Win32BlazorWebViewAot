@@ -1,0 +1,95 @@
+# Claude Code (Anthropic)
+.claude/
+CLAUDE.local.md
+settings.local.json
+mcp.local.json
+*.claude-output.md
+
+# Cursor
+.cursor/
+.cursor-chat-history/
+.cursorindexingignore
+
+# GitHub Copilot
+.github/copilot-instructions.local.md
+
+# OpenAI Codex CLI
+.codex/
+
+# Aider
+.aider*
+!.aider.conf.yml
+!.aiderignore
+
+# Windsurf (Codeium)
+.windsurf/
+
+# Cline / Roo Code
+.clinerules/
+.roo/
+
+# Continue
+.continue/
+
+# Zed AI
+.zed/ai/
+
+# OpenClaw / Hermes
+.openclaw/
+.hermes/
+
+# Gemini / Google Antigravity
+.gemini/
+.agent/
+
+# ── Shared Local Configs, Scratchpads & Vector Stores ──────────────────────
+*.local.json
+*.local.md
+prompts/scratch/
+.mcp.local.json
+
+# Local RAG / Agent Memory Databases
+chroma_db/
+.chroma/
+lancedb/
+.qdrant/
+.codegraph/
+*.sqlite3-wal
+*.sqlite3-shm
+
+# t-plan: private runtime state — never commit or publish
+plan_*.md
+plan.md
+/package/
+
+# Others
+.tmp
+
+# Editors
+.vscode/
+.vs/
+.idea/
+
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+!Win32BlazorWebViewAot/build/
+bld/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+msbuild.log
+msbuild.err
+msbuild.wrn
+
+# NodeJs
+node_modules/
+dist/
+package-lock.json
+

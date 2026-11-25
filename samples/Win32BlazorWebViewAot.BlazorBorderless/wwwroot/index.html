@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Win32BlazorWebViewAot Sample</title>
+	<base href="/" />
+	<link rel="stylesheet" href="css/app.css" />
+</head>
+
+<body>
+	<div id="app">
+		<div class="boot">Loading components…</div>
+	</div>
+
+	<div id="blazor-error-ui">
+		An unhandled error has occurred.
+		<a href="." class="reload">Reload</a>
+		<span class="dismiss">🗙</span>
+	</div>
+
+	<script src="_framework/blazor.webview.js"></script>
+	<script>
+		// The other direction of interop: this inline script calls INTO .NET with no component and no IJSRuntime. The target is
+		// the [JSInvokable] GetAppInfo in DotNetBridge.cs, and the first argument names its assembly — a string, so a typo fails
+		// at runtime rather than at build. It has to be invokeMethodAsync: the synchronous DotNet.invokeMethod is Blazor
+		// WebAssembly only and throws "isn't supported" here, so even a plain string comes back as a promise.
+		//
+		// The listener is delegated because the button itself is rendered by Home.razor after startup, and its answers are kept
+		// in .NET state and rendered by Blazor — writing into the component's subtree from here would be wiped by the next render.
+		document.addEventListener('click', (event) => {
+			if (!event.target.closest('#btn-bridge')) {
+				return;
+			}
+
+			DotNet.invokeMethodAsync('Win32BlazorWebViewAot.BlazorBorderless', 'GetAppInfo')
+				.catch((error) => DotNet.invokeMethodAsync(
+					'Win32BlazorWebViewAot.BlazorBorderless', 'ReportBridgeFailure', String(error)));
+		});
+	</script>
+</body>
+
+</html>

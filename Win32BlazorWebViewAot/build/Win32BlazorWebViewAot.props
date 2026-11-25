@@ -1,0 +1,24 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!--
+    Trimming / Native AOT defaults a Blazor Hybrid app needs, applied on package install (the file is named after the
+    package so MSBuild imports it automatically). Blazor itself is not trim- or AOT-clean yet; every default here can be
+    overridden in the application project.
+  -->
+  <PropertyGroup>
+    <!--
+      PublishAot / PublishTrimmed disable reflection-based System.Text.Json, but Blazor's WebView IPC still serializes
+      through it. Keep it on, the way the Blazor WebAssembly SDK does. An app that wants it off must supply source-
+      generated contexts for every type crossing IPC and JS interop.
+    -->
+    <JsonSerializerIsReflectionEnabledByDefault Condition="'$(JsonSerializerIsReflectionEnabledByDefault)' == ''">true</JsonSerializerIsReflectionEnabledByDefault>
+
+    <!--
+      Razor components are activated and parameterised through reflection, and Razor-generated code passes component
+      types (layouts, DynamicComponent, ...) in ways the trimmer cannot follow. Trim only assemblies that opt in with
+      IsTrimmable — the framework — and keep the app and any Razor class libraries whole.
+    -->
+    <TrimMode Condition="'$(TrimMode)' == ''">partial</TrimMode>
+  </PropertyGroup>
+
+</Project>
