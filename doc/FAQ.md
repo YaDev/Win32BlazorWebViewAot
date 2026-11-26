@@ -60,7 +60,9 @@ only from `Win32Window.BeginDrag()` in the title-bar handler.
 
 ## Work posted after closing throws `Win32DispatcherException`
 
-Expected. Once shutdown starts, queued work faults instead of hanging against a window that no longer pumps. Cancel your producers
+Expected. Once shutdown starts, queued work faults instead of hanging against a window that no longer pumps — `Win32Window.Run()`
+completes this thread's queue when it returns, so anything posted after that fails fast rather than waiting for a pump that is gone.
+If you run your own message loop, call `Win32MessageQueue.Complete()` when your shutdown begins. Either way, cancel your producers
 when the window reports `IsClosing`.
 
 ## Where does an exception from my component or my `InvokeAsync` go?

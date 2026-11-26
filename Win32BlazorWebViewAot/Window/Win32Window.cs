@@ -313,10 +313,29 @@ namespace Win32BlazorWebViewAot
 		/// Runs the message loop of this thread until <c>WM_QUIT</c>. Must be called on the window's thread.
 		/// </summary>
 		/// <returns>The exit code carried by <c>WM_QUIT</c>, or <c>-1</c> if <c>GetMessageW</c> failed.</returns>
+		/// <remarks>
+		/// Returning also ends this thread's <see cref="Win32MessageQueue"/>: nothing can run on a queue whose pump is gone, so
+		/// completing it turns a later post into <see cref="Win32DispatcherException"/> instead of work that waits forever. A host
+		/// that pumps the messages itself owns the queue and has to complete it by hand.
+		/// </remarks>
 		public int Run()
 		{
 			ObjectDisposedException.ThrowIf(_isDisposed, this);
 
+			try
+			{
+				return PumpUntilQuit();
+			}
+			finally
+			{
+				// Own the queue's lifetime: Run is what makes it usable, so Run leaving is what retires it. Dispose runs on the
+				// owning thread, which is the only thread allowed to destroy the message-only window.
+				Win32MessageQueue.Current?.Dispose();
+			}
+		}
+
+		private int PumpUntilQuit()
+		{
 			MSG message;
 			while (true)
 			{

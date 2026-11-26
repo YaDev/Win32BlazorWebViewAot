@@ -21,8 +21,14 @@ namespace Win32BlazorWebViewAot
 	/// };
 	/// window.RootComponents.Add&lt;App&gt;("#app");
 	/// window.Show();
-	/// await window.StartAsync();
-	/// window.Run();
+	///
+	/// // Startup awaits WebView2 creation, and those COM callbacks are delivered by this thread's message loop. Start it
+	/// // here and let Run() pump: awaiting before the loop exists never resumes.
+	/// var startup = window.StartAsync();
+	/// var exitCode = window.Run();
+	///
+	/// // Run() returns once the window is gone; a failed startup shows up on that task, not as an exception here.
+	/// return startup.IsFaulted ? 1 : exitCode;
 	/// </code>
 	/// </example>
 	/// <para>

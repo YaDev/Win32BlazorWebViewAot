@@ -92,6 +92,7 @@ internal static class Program
 			("21 Clearing root components unmounts the mounted components", (sp, ms) => ClearRootComponentsUnmounts(sp, ms)),
 			("22 A navigation to a foreign scheme stays out of the WebView", (sp, ms) => ForeignSchemeNavigationStaysOutOfWebView(sp, ms)),
 			("23 Work the caller awaits faults its task and stays out of the unhandled path", (sp, ms) => AwaitedDispatchFailureStaysOutOfUnhandledPath(sp, ms)),
+			("24 Work posted after Run returns faults instead of hanging", (sp, ms) => WorkAfterPumpEndsFaults(sp, ms)),
 			// 10b MUST stay last: it completes THIS thread's Win32MessageQueue, which is terminal — every later scenario
 			// would fault its dispatcher work with Win32DispatcherException (observed when 11 ran after it).
 			("10b Work posted to a closed queue faults instead of hanging", (sp, ms) => WorkOnClosedQueue(sp, ms)),
@@ -1602,6 +1603,104 @@ internal static class Program
 		{
 			bare.Close();
 			WaitFor(() => bare.IsDisposed, TimeSpan.FromSeconds(30), "the unsubscribed window to close");
+		}
+	}
+
+	/// <summary>
+	/// DESIGN.md promises that work queued after shutdown faults with <see cref="Win32DispatcherException"/> rather than hanging
+	/// against a window that no longer pumps. The pump ends when <c>Run()</c> returns, so that is the moment the thread's queue has
+	/// to be completed — until it was, nothing ever completed a queue in production and this post simply never ran.
+	/// </summary>
+	private static void WorkAfterPumpEndsFaults(IServiceProvider services, int delay)
+	{
+		using var ready = new ManualResetEventSlim(false);
+		using var settled = new ManualResetEventSlim(false);
+
+		Win32MessageQueue? queue = null;
+		var completedFlag = false;
+		var ran = false;
+		string? outcome = null;
+		Exception? threadError = null;
+
+		var worker = new Thread(() =>
+		{
+			try
+			{
+				queue = Win32MessageQueue.GetOrCreateForCurrentThread();
+
+				// QuitOnDestroy stays at its default: closing the window posts WM_QUIT, which is what ends Run().
+				var window = new BlazorWebViewWindow("Win32BlazorWebViewAot.LifetimeTests");
+				window.Show();
+
+				// Close as the first thing the loop does, so this thread needs no outside hand and the scenario cannot stall.
+				_ = queue.TryPost(window.Close);
+				ready.Set();
+
+				_ = window.Run();
+
+				completedFlag = queue.IsComplete;
+
+				// Post without pumping anything: a live queue would run this, a completed one must fault the task outright.
+				var posted = queue.InvokeAsync(() => ran = true);
+				for (var attempt = 0; attempt < 100 && !posted.IsCompleted; attempt++)
+				{
+					Thread.Sleep(50);
+				}
+
+				if (!posted.IsCompleted)
+				{
+					outcome = "hung: the work sat in a queue whose pump had already ended";
+				}
+				else if (posted.IsFaulted)
+				{
+					var baseException = posted.Exception!.GetBaseException();
+					outcome = $"{baseException.GetType().Name}: {baseException.Message}";
+				}
+
+				settled.Set();
+			}
+			catch (Exception exception)
+			{
+				threadError = exception;
+				ready.Set();
+				settled.Set();
+			}
+		});
+
+		worker.SetApartmentState(ApartmentState.STA);
+		worker.Start();
+
+		if (!ready.Wait(TimeSpan.FromSeconds(60)))
+		{
+			throw new TimeoutException("Timed out waiting for the pump thread to start.");
+		}
+
+		if (!settled.Wait(TimeSpan.FromSeconds(90)))
+		{
+			throw new TimeoutException($"Timed out waiting for the pump thread to settle. {threadError}");
+		}
+
+		worker.Join(TimeSpan.FromSeconds(30));
+
+		if (threadError is not null)
+		{
+			throw new InvalidOperationException($"The pump thread failed: {threadError.GetType().Name}: {threadError.Message}");
+		}
+
+		if (!completedFlag)
+		{
+			throw new InvalidOperationException("Run() returned but the thread's message queue was never completed.");
+		}
+
+		if (ran)
+		{
+			throw new InvalidOperationException("Work posted after Run() returned still ran.");
+		}
+
+		if (outcome is null || !outcome.StartsWith(nameof(Win32DispatcherException), StringComparison.Ordinal))
+		{
+			throw new InvalidOperationException(
+				$"Expected Win32DispatcherException for work posted after the pump ended, got {outcome ?? "no outcome"}.");
 		}
 	}
 

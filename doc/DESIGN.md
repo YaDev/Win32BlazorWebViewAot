@@ -68,14 +68,17 @@ A window you write yourself gets no such help: see [API.md](API.md#windows).
 `Win32MessageQueue` posts work to the UI thread with `PostMessage` and a `WM_APP` message; `Win32SynchronizationContext` is that
 queue seen as a `SynchronizationContext`; Blazor's `Dispatcher` runs on top. Component work therefore lands on the UI thread and
 is awaited there. Once shutdown has started, queued work faults with `Win32DispatcherException` rather than hanging against a
-window that no longer pumps.
+window that no longer pumps — and something really does start it: `Win32Window.Run()` completes (and disposes) this thread's queue
+when the loop ends, because a queue whose pump is gone can never run anything again. A host that pumps its own messages instead of
+calling `Run()` owns the queue and has to call `Win32MessageQueue.Complete()` at the point its shutdown begins.
 
 There is one queue per UI thread: several windows on the same thread share it — and therefore share its synchronization context —
 rather than each installing their own. Work lands in a concurrent queue and is drained by a message-only window, so continuations
 of WebView2 work resume on the thread COM requires.
 
 The dispatcher upholds four rules Blazor depends on: work dispatched *on* the UI thread runs inline; work from another thread is
-scheduled; a dropped item faults its task instead of never completing; exceptions reach the owner's unhandled-exception path. The
+scheduled; a dropped item faults its task instead of never completing; a failure faults the task of whoever asked for the work and
+stops there, so only failures with no awaiter reach the unhandled path. The
 tempting simplification to avoid is running inline on a completed queue — "inline" there would execute component work against a
 renderer and browser that are already being torn down, so a completed queue rejects everything, including dispatches that arrive on
 the UI thread itself.

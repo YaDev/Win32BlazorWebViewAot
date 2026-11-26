@@ -22,7 +22,6 @@ namespace Win32BlazorWebViewAot
 		private const string ClassName = "Win32BlazorWebViewAot.Queue";
 
 		private static readonly Lock s_gate = new();
-		private static readonly List<Win32MessageQueue> s_all = new();
 		private static readonly Dictionary<nint, Win32MessageQueue> s_instances = new();
 
 		// Rooted: Windows calls through this pointer for as long as any queue window of the class exists.
@@ -85,7 +84,6 @@ namespace Win32BlazorWebViewAot
 			lock (s_gate)
 			{
 				s_instances[_handle] = this;
-				s_all.Add(this);
 			}
 
 			SynchronizationContext = new Win32SynchronizationContext(this);
@@ -209,6 +207,11 @@ namespace Win32BlazorWebViewAot
 		/// <summary>
 		/// Stops accepting work. Work already queued still drains, so pending component continuations finish.
 		/// </summary>
+		/// <summary>
+		/// Stops accepting work: later posts fault with <see cref="Win32DispatcherException"/>, and anything already queued stays
+		/// queued. <see cref="Win32Window.Run"/> calls this through <see cref="Dispose"/> when the pump ends; a host that pumps its
+		/// own messages calls it when its shutdown starts.
+		/// </summary>
 		public void Complete() => _complete = true;
 
 		/// <inheritdoc />
@@ -216,7 +219,6 @@ namespace Win32BlazorWebViewAot
 		{
 			lock (s_gate)
 			{
-				_ = s_all.Remove(this);
 				if (_handle != 0)
 				{
 					_ = s_instances.Remove(_handle);
