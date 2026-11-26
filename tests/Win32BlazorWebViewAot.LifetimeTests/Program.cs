@@ -33,6 +33,9 @@ internal static class Program
 	private static readonly ConcurrentQueue<string> s_unobserved = new();
 	private static readonly ConcurrentQueue<string> s_logged = new();
 	private static readonly ConcurrentQueue<string> s_urlLoading = new();
+
+	// The environment wrapper of the most recently initialized view (scenario 20: owner and release are what it proves).
+	private static volatile DirectN.Extensions.Com.IComObject<WebView2.ICoreWebView2Environment>? s_lastInitializedEnvironment;
 	private static readonly List<string> s_notes = [];
 
 	private static bool s_verbose;
@@ -85,6 +88,7 @@ internal static class Program
 			("17 Marking a reported failure handled keeps it out of the unhandled path", (sp, ms) => HandledFlagControlsPromotion(sp, ms)),
 			("18 A new-window request for a non-browser scheme is refused, not shell-executed", (sp, ms) => NewWindowSchemeAllowList(sp, ms)),
 			("19 A queue whose window class name was taken still runs its own work", (sp, ms) => QueueOnRecycledThreadIdRunsWork(sp, ms)),
+			("20 An owned WebView2 environment is released on close; a shared one survives", (sp, ms) => OwnedEnvironmentReleasedOnClose(sp, ms)),
 			// 10b MUST stay last: it completes THIS thread's Win32MessageQueue, which is terminal — every later scenario
 			// would fault its dispatcher work with Win32DispatcherException (observed when 11 ran after it).
 			("10b Work posted to a closed queue faults instead of hanging", (sp, ms) => WorkOnClosedQueue(sp, ms)),
@@ -1374,6 +1378,63 @@ internal static class Program
 		}
 	}
 
+	/// <summary>
+	/// The view creates — and so owns — its environment unless the app supplies one, and owning means teardown must release
+	/// it. DisposeCoreAsync used to null _manager before the finally that released through the field, making that call always a
+	/// no-op: the environment survived until some finalizer felt like it. The shared half guards the other side of the same
+	/// boundary — an app-owned environment must NOT be disposed when one view closes.
+	/// </summary>
+	private static void OwnedEnvironmentReleasedOnClose(IServiceProvider services, int delay)
+	{
+		// (a) Default path: library-created, library-owned. Closing must dispose it.
+		var window = OpenWindow(services, delay);
+		var owned = s_lastInitializedEnvironment ?? throw new InvalidOperationException("No environment was captured at initialization.");
+
+		window.Close();
+		WaitFor(() => window.IsDisposed, TimeSpan.FromSeconds(30), "the window to close");
+
+		WaitFor(
+			() => owned.IsDisposed,
+			TimeSpan.FromSeconds(15),
+			"the owned environment to be disposed by teardown");
+
+		// (b) App-supplied shared path: the app owns it; one view closing must leave it usable.
+		DirectN.Extensions.Com.IComObject<WebView2.ICoreWebView2Environment>? shared = null;
+		var sharedServices = new ServiceCollection();
+		sharedServices.AddLogging(builder =>
+		{
+			builder.SetMinimumLevel(LogLevel.Error);
+			builder.AddProvider(new CapturingLoggerProvider(s_logged));
+		});
+		sharedServices.AddWin32BlazorWebViewAot().UseSharedCoreWebView2Environment(async (_, cancellationToken) =>
+		{
+			// The runtime call is nullable-returning: a WebView2 that hands back nothing is an environment creation failure.
+			var environment = await WebView2.Functions.CreateCoreWebView2EnvironmentWithOptionsAsync(null, null, null)
+				?? throw new InvalidOperationException("WebView2 returned no environment.");
+			shared = environment; // app-owned: the library must never dispose this one
+			return environment;
+		});
+
+		using var provider = sharedServices.BuildServiceProvider();
+		var second = OpenWindow(provider, delay);
+		if (!ReferenceEquals(shared, s_lastInitializedEnvironment))
+		{
+			throw new InvalidOperationException("The shared-environment view initialized with an environment other than the app's own.");
+		}
+
+		second.Close();
+		WaitFor(() => second.IsDisposed, TimeSpan.FromSeconds(30), "the shared-environment window to close");
+
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
+		GC.Collect();
+
+		if (shared!.IsDisposed)
+		{
+			throw new InvalidOperationException("Teardown disposed the app-owned shared environment.");
+		}
+	}
+
 	private static IServiceProvider CreateServices()
 	{
 		var services = new ServiceCollection();
@@ -1441,6 +1502,9 @@ internal static class Program
 
 		// Every navigation decision the view makes, captured for scenario 18.
 		view.UrlLoading += (_, e) => s_urlLoading.Enqueue($"{e.UrlLoadingStrategy} {e.Url}");
+
+		// The browser objects of the newest view; scenario 20 asks whether an owned environment was released.
+		view.BlazorWebViewInitialized += (_, e) => s_lastInitializedEnvironment = e.Environment;
 
 		// Reaching this handler is the failure: it means an exception escaped to the host, which in an app is a crash.
 		view.UnhandledException += (_, e) =>

@@ -352,9 +352,11 @@ namespace Win32BlazorWebViewAot
 		{
 			RootComponents.CollectionChanged -= HandleRootComponentsChanged;
 
+			// Captured before the field is nulled: the finally below releases through this local, because _manager is
+			// deliberately gone by then and releasing through the field was always a no-op.
+			var manager = _manager;
 			try
 			{
-				var manager = _manager;
 				if (manager is not null)
 				{
 					_manager = null;
@@ -379,7 +381,7 @@ namespace Win32BlazorWebViewAot
 				// synchronization context deliberately stay alive: whoever is awaiting this disposal still needs them, and
 				// other views on the thread share them.
 				_compositionHost.Dispose();
-				_manager?.ReleaseOwnedEnvironment();
+				manager?.ReleaseOwnedEnvironment();
 
 				_queue.UnhandledException -= HandleQueueUnhandledException;
 			}
