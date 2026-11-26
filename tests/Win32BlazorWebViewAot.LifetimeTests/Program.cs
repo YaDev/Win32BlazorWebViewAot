@@ -91,6 +91,7 @@ internal static class Program
 			("20 An owned WebView2 environment is released on close; a shared one survives", (sp, ms) => OwnedEnvironmentReleasedOnClose(sp, ms)),
 			("21 Clearing root components unmounts the mounted components", (sp, ms) => ClearRootComponentsUnmounts(sp, ms)),
 			("22 A navigation to a foreign scheme stays out of the WebView", (sp, ms) => ForeignSchemeNavigationStaysOutOfWebView(sp, ms)),
+			("23 Work the caller awaits faults its task and stays out of the unhandled path", (sp, ms) => AwaitedDispatchFailureStaysOutOfUnhandledPath(sp, ms)),
 			// 10b MUST stay last: it completes THIS thread's Win32MessageQueue, which is terminal — every later scenario
 			// would fault its dispatcher work with Win32DispatcherException (observed when 11 ran after it).
 			("10b Work posted to a closed queue faults instead of hanging", (sp, ms) => WorkOnClosedQueue(sp, ms)),
@@ -1499,6 +1500,109 @@ internal static class Program
 
 		// file: is covered by the policy assertion above rather than a live navigation: Chromium refuses a web-to-file
 		// top-level navigation on its own, so no NavigationStarting event ever reaches the host to be judged.
+	}
+
+	/// <summary>
+	/// Work whose failure the caller is handed belongs to the caller: the task faults and that is the end of it. The unhandled
+	/// path — report plus promotion — is for failures nobody will ever look at, which means the library's own discarded tasks and
+	/// a browser that went away. Used to be every awaited failure was reported as well, and one with no subscriber willing to
+	/// claim it took the process down.
+	/// </summary>
+	private static void AwaitedDispatchFailureStaysOutOfUnhandledPath(IServiceProvider services, int delay)
+	{
+		const string Marker = "Deliberate awaited dispatcher failure";
+
+		var window = OpenWindow(services, delay);
+		WaitFor(() => BackgroundWorkState.Started >= 1, TimeSpan.FromSeconds(60), "background work to start");
+
+		// Phase A: the view must not raise UnhandledException for a failure its caller is about to observe. The harness's own
+		// handler sets Handled, which would hide a promotion — so the event itself is what is counted here.
+		var reported = 0;
+		EventHandler<BlazorWebViewUnhandledExceptionEventArgs> watch = (_, _) => Interlocked.Increment(ref reported);
+		window.View.UnhandledException += watch;
+		try
+		{
+			var faulted = window.View.Dispatcher.InvokeAsync(() => throw new InvalidOperationException(Marker));
+			WaitFor(() => faulted.IsCompleted, TimeSpan.FromSeconds(15), "the awaited work to fault");
+
+			if (!faulted.IsFaulted)
+			{
+				throw new InvalidOperationException("Awaited dispatcher work completed instead of faulting its task.");
+			}
+
+			var baseException = faulted.Exception!.GetBaseException();
+			if (baseException is not InvalidOperationException || !baseException.Message.Contains(Marker, StringComparison.Ordinal))
+			{
+				throw new InvalidOperationException(
+					$"The caller saw {baseException.GetType().Name}: {baseException.Message} instead of the failure it threw.");
+			}
+
+			Pump.For(TimeSpan.FromMilliseconds(250));
+
+			if (reported != 0)
+			{
+				throw new InvalidOperationException(
+					$"An awaited failure was reported {reported} time(s) as unhandled even though the caller received it.");
+			}
+		}
+		finally
+		{
+			window.View.UnhandledException -= watch;
+		}
+
+		// A faulted task is not a teardown: the dispatcher must keep working and the window must still close normally.
+		var followUp = window.View.Dispatcher.InvokeAsync(() => 42);
+		WaitFor(() => followUp.IsCompleted, TimeSpan.FromSeconds(15), "work dispatched after the faulted one");
+		if (followUp.IsFaulted)
+		{
+			throw followUp.Exception!.GetBaseException();
+		}
+
+		if (followUp.Result != 42)
+		{
+			throw new InvalidOperationException($"Follow-up work returned {followUp.Result} instead of 42.");
+		}
+
+		window.Close();
+		WaitFor(() => window.IsDisposed, TimeSpan.FromSeconds(30), "the window to close after a faulted dispatch");
+
+		// Phase B: nothing is subscribed here at all, so the only thing standing between this failure and the runtime's
+		// unhandled path is the faulted task itself. Promotion is observable the way scenario 17 makes it observable: an
+		// unobserved exception surfacing at collection.
+		var bare = new BlazorWebViewWindow("Win32BlazorWebViewAot.LifetimeTests") { QuitOnDestroy = false };
+		bare.Show();
+		Pump.For(TimeSpan.FromMilliseconds(150));
+		DrainUnobserved();
+		try
+		{
+			var unwatched = bare.View.Dispatcher.InvokeAsync(() => throw new InvalidOperationException($"{Marker} with no subscriber"));
+			WaitFor(() => unwatched.IsCompleted, TimeSpan.FromSeconds(15), "the unsubscribed dispatch to fault");
+
+			if (!unwatched.IsFaulted)
+			{
+				throw new InvalidOperationException("The unsubscribed dispatch completed instead of faulting its task.");
+			}
+
+			// Reading Exception is what an app catching the failure does; it marks the task observed, so anything that still
+			// reaches the unobserved path below was put there on purpose by a promotion.
+			_ = unwatched.Exception;
+
+			Pump.For(TimeSpan.FromMilliseconds(250));
+			GC.Collect();
+			GC.WaitForPendingFinalizers();
+			GC.Collect();
+
+			if (UnobservedContains(Marker))
+			{
+				throw new InvalidOperationException(
+					"An awaited failure was promoted to the runtime's unhandled path even though its task handed it back.");
+			}
+		}
+		finally
+		{
+			bare.Close();
+			WaitFor(() => bare.IsDisposed, TimeSpan.FromSeconds(30), "the unsubscribed window to close");
+		}
 	}
 
 	private static void AssertDefaultStrategy(Uri uri, UrlLoadingStrategy expected)

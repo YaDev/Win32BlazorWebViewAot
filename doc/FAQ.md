@@ -63,10 +63,12 @@ only from `Win32Window.BeginDrag()` in the title-bar handler.
 Expected. Once shutdown starts, queued work faults instead of hanging against a window that no longer pumps. Cancel your producers
 when the window reports `IsClosing`.
 
-## An exception in a component surfaces twice, or closes the app
+## Where does an exception from my component or my `InvokeAsync` go?
 
-Dispatched failures arrive on `UnhandledException`; set `Handled = true` to keep running, and leave it false if you want a crash
-reporter to see it. Throws inside your own `Win32Window.On*` overrides are a different boundary —
+To whoever is waiting for it. `Dispatcher.InvokeAsync` faults the task you were handed and nothing else happens, and a throw inside
+a component follows Blazor's own path into an `ErrorBoundary` or the renderer's logging. `UnhandledException` is only for failures
+that have no awaiter — work this package runs and drops, or a browser process that died; set `Handled = true` to keep running and
+leave it false if you want a crash reporter to see it. Throws inside your own `Win32Window.On*` overrides are a different boundary —
 [DESIGN.md](DESIGN.md#two-exception-boundaries).
 
 ## `DotNet.invokeMethod` throws "isn't supported"

@@ -205,8 +205,11 @@ namespace Win32BlazorWebViewAot
 		public event EventHandler<BlazorWebViewInitializedEventArgs>? BlazorWebViewInitialized;
 
 		/// <summary>
-		/// Raised on the UI thread when work Blazor dispatched threw. Set
-		/// <see cref="BlazorWebViewUnhandledExceptionEventArgs.Handled"/> to keep the process alive.
+		/// Raised on the UI thread for a failure that has no awaiter: work this package runs and deliberately drops, an
+		/// <c>async void</c> continuation posted through the queue, or a browser process that went away. Work you awaited yourself
+		/// is not reported here — its task faults and you catch it, which is also how Blazor surfaces component failures to an
+		/// <c>ErrorBoundary</c>. Set <see cref="BlazorWebViewUnhandledExceptionEventArgs.Handled"/> to keep the process alive;
+		/// otherwise the failure is promoted so a debugger or crash handler sees it.
 		/// </summary>
 		public event EventHandler<BlazorWebViewUnhandledExceptionEventArgs>? UnhandledException;
 
@@ -284,8 +287,9 @@ namespace Win32BlazorWebViewAot
 					rootComponent.Selector,
 					rootComponent.Parameters?.Count ?? 0);
 
-				// The page is not loaded yet, so this completes synchronously.
-				_ = rootComponent.AddToWebViewManagerAsync(manager);
+				// The page is not loaded yet, so this normally completes synchronously. Nobody awaits it, so the dispatcher
+				// watches it: a mount that fails has to surface somewhere other than a faulted task no one holds.
+				_dispatcher.ObserveUnawaited(rootComponent.AddToWebViewManagerAsync(manager));
 				_mounted.Add(rootComponent);
 			}
 
@@ -422,7 +426,8 @@ namespace Win32BlazorWebViewAot
 			// event args cannot say what went away. Diffing the wanted set against the mounted set can.
 			var desired = RootComponents.ToArray();
 
-			_ = _dispatcher.InvokeAsync(async () =>
+			// A collection change has no awaiter either — the caller was a UI event on the collection.
+			_dispatcher.ObserveUnawaited(_dispatcher.InvokeAsync(async () =>
 			{
 				foreach (var component in _mounted.Where(component => !desired.Contains(component)).ToArray())
 				{
@@ -437,7 +442,7 @@ namespace Win32BlazorWebViewAot
 						await component.AddToWebViewManagerAsync(manager).ConfigureAwait(true);
 					}
 				}
-			});
+			}));
 		}
 
 		private void HandleBrowserProcessFailed(BrowserProcessFailedEventArgs args)

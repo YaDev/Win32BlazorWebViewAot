@@ -50,7 +50,7 @@ services.AddBlazorWebViewDeveloperTools();     // Debug only, normally; see the 
 | `Services` `HostPage` `StartPath` | host page is relative to the project, e.g. `wwwroot/index.html` |
 | `RootComponents.Add<TComponent>(selector, parameters?)` | mount at a CSS selector; add before or after startup, changes apply live |
 | `StartAsync(CancellationToken)` | start it, then call `Run()` — never await before pumping |
-| `Dispatcher` | Blazor's dispatcher over the window's message queue |
+| `Dispatcher` | Blazor's dispatcher over the window's message queue. A failure faults the task you awaited; it is not reported as unhandled |
 | `Window` `Controller` `WebView` `CompositionController` | escape hatches; the last three are null until startup completes |
 | `AllowDrop` | default `true` |
 | `EmbeddedContentAssembly` `EmbeddedContentBaseFolder` | content that lives in another assembly, e.g. a Razor class library |
@@ -67,7 +67,7 @@ Events: `UrlLoading`, `BlazorWebViewInitializing`, `BlazorWebViewInitialized`, `
 | `UrlLoadingEventArgs` | `Url`, and `UrlLoadingStrategy` you may rewrite: `OpenInWebView`, `OpenExternally`, `Hide`. Fires for ordinary navigations *and* for new-window requests (`target="_blank"`, `window.open`), which default to `OpenExternally`; on a new-window request `OpenInWebView` means "block it" — the package never opens a second WebView |
 | `BlazorWebViewInitializingEventArgs` | `UserDataFolder`, `BrowserExecutableFolder`, `EnvironmentOptions`, `CoreWebView2Environment` — before the browser exists |
 | `BlazorWebViewInitializedEventArgs` | the browser objects, before the first navigation; this is where `WebView2Settings` are overridden |
-| `BlazorWebViewUnhandledExceptionEventArgs` | `Exception`, `Handled` |
+| `BlazorWebViewUnhandledExceptionEventArgs` | `Exception`, `Handled`. Raised only for failures nobody awaits — dropped work, a posted `async void` continuation, a dead browser process. Work you dispatched yourself faults your task |
 | `BrowserProcessFailedEventArgs` | the WebView2 failure kind, exit code, and `IsTerminal` |
 | `Win32UnhandledExceptionEventArgs` | `Exception`, `Handled`, from the window-procedure boundary |
 

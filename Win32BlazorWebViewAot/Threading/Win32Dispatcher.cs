@@ -1,11 +1,16 @@
 // Blazor's Dispatcher over the Win32 message queue: inline on the UI thread, scheduled from other threads, and a completed
 // queue rejects everything — including UI-thread dispatches — instead of running against a teardown in progress.
+//
+// A failure here belongs to whoever asked for the work: it faults their task and stops. Reporting is reserved for failures that
+// have no awaiter — the work this library deliberately drops, and anything run through the queue's posted callbacks — because
+// reporting something the caller already caught turns a handled bug into an unhandled report.
 // The rules it upholds and why: "Threading" in doc/DESIGN.md.
 
 namespace Win32BlazorWebViewAot
 {
 	/// <summary>
-	/// Runs Blazor work on a Win32 UI thread.
+	/// Runs Blazor work on a Win32 UI thread. A failure faults the awaiting caller's task; only work nobody awaits is
+	/// reported through the view's unhandled path.
 	/// </summary>
 	internal sealed class Win32Dispatcher(Win32MessageQueue queue, Action<Exception> onUnhandledException) : Dispatcher
 	{
@@ -34,9 +39,10 @@ namespace Win32BlazorWebViewAot
 					await _queue.InvokeAsync(workItem).ConfigureAwait(false);
 				}
 			}
-			catch (Exception exception)
+			catch
 			{
-				Report(exception);
+				// The caller awaits this task and sees the failure. Reporting it as well would double-report every
+				// handled bug, and promoting one nobody marks handled would report a failure that was never unhandled.
 				throw;
 			}
 		}
@@ -58,9 +64,8 @@ namespace Win32BlazorWebViewAot
 					await _queue.InvokeAsync(() => workItem()).Unwrap().ConfigureAwait(false);
 				}
 			}
-			catch (Exception exception)
+			catch
 			{
-				Report(exception);
 				throw;
 			}
 		}
@@ -75,9 +80,8 @@ namespace Win32BlazorWebViewAot
 			{
 				return CheckAccess() ? workItem() : await _queue.InvokeAsync(workItem).ConfigureAwait(false);
 			}
-			catch (Exception exception)
+			catch
 			{
-				Report(exception);
 				throw;
 			}
 		}
@@ -94,11 +98,52 @@ namespace Win32BlazorWebViewAot
 					? await workItem().ConfigureAwait(false)
 					: await _queue.InvokeAsync(() => workItem()).Unwrap().ConfigureAwait(false);
 			}
-			catch (Exception exception)
+			catch
 			{
-				Report(exception);
 				throw;
 			}
+		}
+
+		/// <summary>
+		/// Watches work whose task the caller drops on purpose. Nobody can await it, so a failure would vanish into the finalizer
+		/// queue; this is what keeps the unhandled path meaningful now that awaited failures report nothing.
+		/// </summary>
+		internal void ObserveUnawaited(Task work)
+		{
+			ArgumentNullException.ThrowIfNull(work);
+
+			if (work.IsFaulted)
+			{
+				// Failed before the caller could hand it over. Reading Exception also marks it observed, which is correct:
+				// it has been reported, so the runtime should not raise it a second time at collection.
+				ReportFailure(work.Exception!);
+				return;
+			}
+
+			if (work.IsCompletedSuccessfully)
+			{
+				return;
+			}
+
+			_ = work.ContinueWith(
+				static (faulted, state) => ((Win32Dispatcher)state!).ReportFailure(faulted.Exception!),
+				this,
+				CancellationToken.None,
+				TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+				TaskScheduler.Default);
+		}
+
+		private void ReportFailure(AggregateException exception)
+		{
+			var baseException = exception.GetBaseException();
+
+			// A queue that completed mid-work is teardown, not a bug: the same case ThrowIfQueueClosed treats as expected.
+			if (baseException is Win32DispatcherException)
+			{
+				return;
+			}
+
+			Report(baseException);
 		}
 
 		private void ThrowIfQueueClosed()

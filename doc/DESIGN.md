@@ -84,8 +84,12 @@ the UI thread itself.
 
 | Event | Fires for | Notes |
 | --- | --- | --- |
-| `BlazorWebViewWindow.UnhandledException` / `BlazorWebView.UnhandledException` | an exception thrown by work Blazor dispatched to the UI thread | set `Handled = true` to keep running; otherwise it is promoted to the runtime's unhandled path, which is what a crash reporter expects |
+| `BlazorWebViewWindow.UnhandledException` / `BlazorWebView.UnhandledException` | a failure that has no awaiter: work this package runs and drops (`async void` continuations posted through the queue, a root component whose mount nobody holds), or a browser process that went away | set `Handled = true` to keep running; otherwise it is promoted to the runtime's unhandled path, which is what a crash reporter expects. Work **you** awaited is not here: `Dispatcher.InvokeAsync` faults your task and stops, because reporting a failure the caller already caught would turn every handled bug into an unhandled report |
 | `Win32Window.UnhandledMessageException` (static) | a throw inside a window procedure — one of your `On*` overrides, or a `Win32MessageQueue.UnhandledException` subscriber failing | Windows called the procedure, so the frames above the throw are native and nothing in `Run()` could catch them. The library catches at that boundary, answers the message with `DefWindowProcW`, and reports here. Process-wide, raised on the UI thread, same `Handled` rule |
+
+The split is deliberate. A component exception belongs to Blazor — it reaches your `ErrorBoundary` or the renderer's own logging,
+and re-reporting it through this event only produced two accounts of one bug, with a process teardown attached when nobody claimed
+it. The event kept its meaning for the failures that would otherwise disappear silently.
 
 A browser process dying is a different thing again: `BrowserProcessFailed` carries `IsTerminal`, so a crashed renderer is
 surfaced rather than swallowed.
