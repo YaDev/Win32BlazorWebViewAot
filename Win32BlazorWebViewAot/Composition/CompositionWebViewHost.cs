@@ -214,7 +214,12 @@ namespace Win32BlazorWebViewAot
 		/// Forwards one <c>WM_POINTER*</c> message (touch or pen). Does nothing when the installed runtime cannot describe a
 		/// pointer; mouse messages keep working in that case.
 		/// </summary>
-		internal void SendPointer(uint message, uint pointerId) => _pointerHandler?.Send(message, pointerId, _window.Handle);
+		/// <summary>
+		/// Hands one pointer message to the browser. False means there was no browser to take it, or the runtime refused
+		/// pointers: the window must then let <c>DefWindowProcW</c> answer the message.
+		/// </summary>
+		internal bool SendPointer(uint message, uint pointerId) =>
+			_pointerHandler is { } handler && handler.Send(message, pointerId, _window.Handle);
 
 		/// <summary>
 		/// Gives the browser first refusal on a keyboard message before the loop translates it. This is how tab traversal,

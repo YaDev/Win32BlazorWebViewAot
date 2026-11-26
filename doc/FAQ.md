@@ -81,6 +81,9 @@ Things automation cannot close, so they are checked by hand on a desktop before 
 - Native caption mode: snap-layout flyout on caption hover, size cursors over the frame edge, a DPI change while dragging between
   monitors, Alt+Space and Alt+F4.
 - The page background reaches all four window edges at 96 / 120 / 144 / 192 DPI, and after maximize.
-- IME text composition; touch and pen on real hardware; a file dropped from Explorer; RDP or software rendering.
+- Touch and pen on real hardware: scroll, tap a link, pinch where the page supports it. On a WebView2 runtime old enough to
+  refuse pointer forwarding, taps must still arrive as clicks — the window hands unclaimed pointer messages to `DefWindowProcW`,
+  and no machine here has a digitizer, so automation cannot prove either path.
+- IME text composition; a file dropped from Explorer; RDP or software rendering.
 - Hovering a text input changes the cursor; clicking an `https://…` link opens the system browser.
 - Closing the window exits with no finalizer crash and no leftover browser process.

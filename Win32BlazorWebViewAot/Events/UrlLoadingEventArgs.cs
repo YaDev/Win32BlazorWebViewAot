@@ -15,8 +15,10 @@ namespace Win32BlazorWebViewAot
 		public UrlLoadingStrategy UrlLoadingStrategy { get; set; }
 
 		/// <summary>
-		/// Creates the arguments with the default policy already applied: same origin stays in the WebView, anything else
-		/// leaves the app.
+		/// Creates the arguments with the default policy already applied: the app's own origin stays in the WebView,
+		/// everything else leaves the app. A scheme that is not http or https — <c>file:</c>, <c>data:</c>, a registered
+		/// protocol handler — is never internal, because rendering it here would run foreign content with this app's
+		/// privileges. Applications that do want such a scheme in the WebView opt it in from <see cref="BlazorWebView.UrlLoading"/>.
 		/// </summary>
 		public static UrlLoadingEventArgs CreateWithDefaultLoadingStrategy(Uri url, Uri baseUri)
 		{
@@ -31,8 +33,14 @@ namespace Win32BlazorWebViewAot
 			return args;
 		}
 
+		/// <summary>
+		/// Only http(s) on the app's own host is internal. A relative URI resolves against the app's page, so it is internal
+		/// as well; checking <see cref="Uri.IsAbsoluteUri"/> first also keeps this from touching <see cref="Uri.Scheme"/>,
+		/// which throws for a relative URI.
+		/// </summary>
 		private static bool IsInternal(Uri url, Uri baseUri) =>
-			url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps ||
+			!url.IsAbsoluteUri ||
+			(url.Scheme == Uri.UriSchemeHttp || url.Scheme == Uri.UriSchemeHttps) &&
 			string.Equals(url.Host, baseUri.Host, StringComparison.OrdinalIgnoreCase);
 	}
 }

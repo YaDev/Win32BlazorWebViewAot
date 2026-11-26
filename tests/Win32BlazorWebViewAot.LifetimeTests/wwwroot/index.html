@@ -28,6 +28,11 @@
 		An unhandled error has occurred.
 	</div>
 
+	<script>
+		// Scenario 22 drives a real top-level navigation from the page, so the host policy is what decides.
+		window.win32aotblazorNavigate = (uri) => { window.location.href = uri; };
+	</script>
+
 	<script src="_framework/blazor.webview.js"></script>
 </body>
 

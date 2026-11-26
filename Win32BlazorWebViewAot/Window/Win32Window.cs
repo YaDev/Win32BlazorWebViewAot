@@ -466,13 +466,17 @@ namespace Win32BlazorWebViewAot
 
 				// Touch and pen arrive as pointer messages. They are forwarded in addition to the mouse messages Windows
 				// synthesizes, because the page needs real touch semantics (pinch, hover-free taps) to behave correctly.
+				// When nothing took the contact — no browser yet, or a runtime that cannot accept pointers — the message must
+				// still reach DefWindowProcW: that is what promotes it to the legacy mouse messages. Answering it with 0 here
+				// would leave touch and pen doing nothing at all.
 				case MessageDecoder.WM_POINTERDOWN:
 				case MessageDecoder.WM_POINTERUPDATE:
 				case MessageDecoder.WM_POINTERUP:
 				case MessageDecoder.WM_POINTERENTER:
 				case MessageDecoder.WM_POINTERLEAVE:
-					OnPointer(message, MessageParameters.PointerId(wParam));
-					return 0;
+					return OnPointer(message, MessageParameters.PointerId(wParam))
+						? 0
+						: Native.DefWindowProcW(Handle, message, wParam, lParam);
 
 				case MessageDecoder.WM_CAPTURECHANGED:
 					// Capture was taken from us (a system drag, an Alt+Tab, a modal). The browser must stop tracking the button.
@@ -624,7 +628,12 @@ namespace Win32BlazorWebViewAot
 		/// </summary>
 		/// <param name="message">The pointer message.</param>
 		/// <param name="pointerId">The id identifying this contact across its whole lifecycle.</param>
-		protected virtual void OnPointer(uint message, uint pointerId) => _composition?.SendPointer(message, pointerId);
+		/// <returns>
+		/// <see langword="true"/> when the contact was consumed and the message is answered; <see langword="false"/> to have
+		/// the window answer it through <c>DefWindowProcW</c>, which is what turns a contact into mouse input on a runtime that
+		/// cannot take pointers. Return <see langword="true"/> only if you handled the contact yourself.
+		/// </returns>
+		protected virtual bool OnPointer(uint message, uint pointerId) => _composition?.SendPointer(message, pointerId) ?? false;
 
 		/// <summary>
 		/// Called from <c>WM_CONTEXTMENU</c> / non-client right-click. The default opens the window's system menu, which a

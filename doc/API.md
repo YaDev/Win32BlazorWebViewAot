@@ -65,15 +65,19 @@ Events: `UrlLoading`, `BlazorWebViewInitializing`, `BlazorWebViewInitialized`, `
 | Type | Carries |
 | --- | --- |
 | `UrlLoadingEventArgs` | `Url`, and `UrlLoadingStrategy` you may rewrite: `OpenInWebView`, `OpenExternally`, `Hide`. Fires for ordinary navigations *and* for new-window requests (`target="_blank"`, `window.open`), which default to `OpenExternally`; on a new-window request `OpenInWebView` means "block it" — the package never opens a second WebView |
-
-External launches (the `OpenExternally` outcome) only shell-execute schemes listed in `WebView2Settings.ExternalLaunchSchemes`
-(default `http`, `https`, `mailto`). Anything else — `file:`, `search-ms:`, custom protocol handlers — is refused with a warning
-and never reaches the OS loader.
 | `BlazorWebViewInitializingEventArgs` | `UserDataFolder`, `BrowserExecutableFolder`, `EnvironmentOptions`, `CoreWebView2Environment` — before the browser exists |
 | `BlazorWebViewInitializedEventArgs` | the browser objects, before the first navigation; this is where `WebView2Settings` are overridden |
 | `BlazorWebViewUnhandledExceptionEventArgs` | `Exception`, `Handled` |
 | `BrowserProcessFailedEventArgs` | the WebView2 failure kind, exit code, and `IsTerminal` |
 | `Win32UnhandledExceptionEventArgs` | `Exception`, `Handled`, from the window-procedure boundary |
+
+The default policy behind that event keeps only the app's own origin inside the browser: http(s) on the app host, plus relative
+URLs, which resolve against the app page. Every other scheme — `file:`, `data:`, a registered protocol handler — is treated as
+foreign and cancelled, because rendering it here would run foreign content with your app's privileges. Opt such a scheme back in
+by setting `UrlLoadingStrategy` to `OpenInWebView` from the handler.
+
+External launches (the `OpenExternally` outcome) only shell-execute schemes listed in `WebView2Settings.ExternalLaunchSchemes`
+(default `http`, `https`, `mailto`). Anything else is refused with a warning and never reaches the OS loader.
 
 ## MSBuild properties
 

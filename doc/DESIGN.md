@@ -94,8 +94,10 @@ surfaced rather than swallowed.
 
 Mouse forwarding sends a managed struct per event. Pointer forwarding cannot: the browser reads the whole `POINTER_INFO` itself
 from the pointer id, which is why `CompositionPointerHandler` is small — map the message to an event kind, ask the runtime to build
-the info for that id, hand it over. Older WebView2 runtimes do not implement the interface that creates a pointer info, so when the
-runtime cannot build one, mouse input keeps working and pointer events simply stop being sent rather than throwing on every touch.
+the info for that id, hand it over. Older WebView2 runtimes do not implement the interface that creates a pointer info. When the
+runtime refuses, the handler says so instead of swallowing the message, and the window lets `DefWindowProcW` answer it — which is
+what promotes the contact to the legacy mouse messages, so touch still reaches the page as clicks. Answering a pointer message with
+`0` here would look harmless and leave touch and pen doing nothing at all.
 
 External drag & drop has the same root cause: a composition-hosted browser has no window of its own, so OLE has nothing to hand a
 drop to. The host registers itself as the drop target and forwards to

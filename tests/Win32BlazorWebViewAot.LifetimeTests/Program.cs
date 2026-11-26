@@ -90,6 +90,7 @@ internal static class Program
 			("19 A queue whose window class name was taken still runs its own work", (sp, ms) => QueueOnRecycledThreadIdRunsWork(sp, ms)),
 			("20 An owned WebView2 environment is released on close; a shared one survives", (sp, ms) => OwnedEnvironmentReleasedOnClose(sp, ms)),
 			("21 Clearing root components unmounts the mounted components", (sp, ms) => ClearRootComponentsUnmounts(sp, ms)),
+			("22 A navigation to a foreign scheme stays out of the WebView", (sp, ms) => ForeignSchemeNavigationStaysOutOfWebView(sp, ms)),
 			// 10b MUST stay last: it completes THIS thread's Win32MessageQueue, which is terminal — every later scenario
 			// would fault its dispatcher work with Win32DispatcherException (observed when 11 ran after it).
 			("10b Work posted to a closed queue faults instead of hanging", (sp, ms) => WorkOnClosedQueue(sp, ms)),
@@ -1459,6 +1460,87 @@ internal static class Program
 		WaitFor(() => window.IsDisposed, TimeSpan.FromSeconds(30), "the window to close after clearing components");
 	}
 
+	/// <summary>The origin the library serves an app from — <c>https://0.0.0.1/</c>, see <c>HostAddressHelper</c>.</summary>
+	private static readonly Uri AppOrigin = new("https://0.0.0.1/");
+
+	// A dead custom scheme and a real local file: both are top-level navigations a page could attempt, and neither may be
+	// rendered inside the app's own WebView, where the app's privileges — and for file:, its whole filesystem reach — apply.
+	private const string ProbeNavigateUri = "win32aotblazor-s2probe://payload";
+	private const string LocalFileUri = "file:///C:/Windows/win.ini";
+
+	/// <summary>
+	/// The default loading policy used to treat every non-http(s) scheme as internal because of operator precedence, so a
+	/// page could load <c>file:</c>, <c>data:</c> or a custom protocol inside the app. Two layers are asserted: the policy
+	/// function itself for every shape of URI, and a genuine in-page navigation to a dead scheme, which must be cancelled,
+	/// refused before the shell, and surviveable by the app.
+	/// </summary>
+	private static void ForeignSchemeNavigationStaysOutOfWebView(IServiceProvider services, int delay)
+	{
+		// (a) The default strategy. Only same-host http(s) stays in; foreign hosts and every other scheme leave.
+		AssertDefaultStrategy(new Uri("https://0.0.0.1/index.html"), UrlLoadingStrategy.OpenInWebView);
+		AssertDefaultStrategy(new Uri("http://0.0.0.1/page"), UrlLoadingStrategy.OpenInWebView);
+		// A relative URI resolves against the app's own page, so it is internal too — a policy that only compares hosts
+		// would cancel it and break in-app links.
+		AssertDefaultStrategy(new Uri("/relative/page", UriKind.Relative), UrlLoadingStrategy.OpenInWebView);
+		AssertDefaultStrategy(new Uri("https://example.com/docs"), UrlLoadingStrategy.OpenExternally);
+		AssertDefaultStrategy(new Uri(ProbeNavigateUri), UrlLoadingStrategy.OpenExternally);
+		AssertDefaultStrategy(new Uri(LocalFileUri), UrlLoadingStrategy.OpenExternally);
+
+		// (b) A real top-level navigation to a dead custom scheme: cancelled inside, and never handed to the shell.
+		var probeWindow = OpenWindow(services, delay, navigateUri: ProbeNavigateUri);
+		WaitFor(
+			() => s_urlLoading.Any(entry => entry.Contains(ProbeNavigateUri, StringComparison.OrdinalIgnoreCase)),
+			TimeSpan.FromSeconds(30),
+			"the UrlLoading event to report the probe-scheme navigation");
+		AssertNavigationStaysOut(probeWindow, ProbeNavigateUri);
+
+		probeWindow.Close();
+		WaitFor(() => probeWindow.IsDisposed, TimeSpan.FromSeconds(30), "the probe-scheme window to close");
+
+		// file: is covered by the policy assertion above rather than a live navigation: Chromium refuses a web-to-file
+		// top-level navigation on its own, so no NavigationStarting event ever reaches the host to be judged.
+	}
+
+	private static void AssertDefaultStrategy(Uri uri, UrlLoadingStrategy expected)
+	{
+		var actual = UrlLoadingEventArgs.CreateWithDefaultLoadingStrategy(uri, AppOrigin).UrlLoadingStrategy;
+		if (actual != expected)
+		{
+			throw new InvalidOperationException($"The default loading strategy for '{uri}' was {actual}, expected {expected}.");
+		}
+	}
+
+	/// <summary>
+	/// A foreign-scheme navigation must be reported as leaving the WebView, refused before any shell attempt, and cancelled
+	/// so the app's own page survives it.
+	/// </summary>
+	private static void AssertNavigationStaysOut(BlazorWebViewWindow window, string uri)
+	{
+		var entry = s_urlLoading.First(entry => entry.Contains(uri, StringComparison.OrdinalIgnoreCase));
+		if (entry.StartsWith(nameof(UrlLoadingStrategy.OpenInWebView), StringComparison.Ordinal))
+		{
+			throw new InvalidOperationException($"The app was allowed to load a foreign URI in its own WebView: {entry}.");
+		}
+
+		WaitFor(
+			() => s_logged.Any(line => line.Contains("Refused", StringComparison.Ordinal) && line.Contains(uri, StringComparison.OrdinalIgnoreCase)),
+			TimeSpan.FromSeconds(10),
+			$"a refusal log naming {uri}");
+
+		if (s_logged.Any(line => line.Contains("Failed to launch", StringComparison.Ordinal)))
+		{
+			throw new InvalidOperationException($"The foreign URI reached Process.Start: {string.Join(" | ", s_logged)}");
+		}
+
+		// The navigation is cancelled, so the page — and therefore the dispatcher — must still be there afterwards.
+		var alive = window.View.Dispatcher.InvokeAsync(() => true);
+		WaitFor(() => alive.IsCompleted, TimeSpan.FromSeconds(15), "the view to stay usable after a cancelled navigation");
+		if (alive.IsFaulted)
+		{
+			throw alive.Exception!.GetBaseException();
+		}
+	}
+
 	private static IServiceProvider CreateServices()
 	{
 		var services = new ServiceCollection();
@@ -1484,7 +1566,8 @@ internal static class Program
 		int delay,
 		bool throwException = false,
 		bool awaitJsInterop = false,
-		string? newWindowUri = null)
+		string? newWindowUri = null,
+		string? navigateUri = null)
 	{
 		var window = new BorderlessBlazorWebViewWindow("Win32BlazorWebViewAot.LifetimeTests")
 		{
@@ -1492,7 +1575,7 @@ internal static class Program
 			QuitOnDestroy = false,
 		};
 
-		Configure(window.View, services, delay, throwException, awaitJsInterop, newWindowUri);
+		Configure(window.View, services, delay, throwException, awaitJsInterop, newWindowUri, navigateUri);
 
 		window.Show();
 
@@ -1512,7 +1595,8 @@ internal static class Program
 		int delay,
 		bool throwException = false,
 		bool awaitJsInterop = false,
-		string? newWindowUri = null)
+		string? newWindowUri = null,
+		string? navigateUri = null)
 	{
 		view.HostPage = @"wwwroot\index.html";
 		view.Services = services;
@@ -1522,6 +1606,7 @@ internal static class Program
 			[nameof(App.ThrowException)] = throwException,
 			[nameof(App.AwaitJsInterop)] = awaitJsInterop,
 			[nameof(App.NewWindowUri)] = newWindowUri,
+			[nameof(App.NavigateUri)] = navigateUri,
 		});
 
 		// Every navigation decision the view makes, captured for scenario 18.

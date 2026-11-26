@@ -43,6 +43,12 @@
 	/// </summary>
 	[Parameter] public string? NewWindowUri { get; set; }
 
+	/// <summary>
+	/// When set, the page assigns it to <c>window.location.href</c> once after its first render: scenario 22 uses a dead custom
+	/// scheme and a <c>file:</c> path to ask what the host does with a top-level navigation away from the app's own origin.
+	/// </summary>
+	[Parameter] public string? NavigateUri { get; set; }
+
 	private void OnClick() => BackgroundWorkState.IncrementClicks();
 
 	protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -50,6 +56,11 @@
 		if (firstRender && NewWindowUri is not null)
 		{
 			await JS.InvokeVoidAsync("open", NewWindowUri, "_blank");
+		}
+
+		if (firstRender && NavigateUri is not null)
+		{
+			await JS.InvokeVoidAsync("win32aotblazorNavigate", NavigateUri);
 		}
 	}
 }

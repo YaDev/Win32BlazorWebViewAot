@@ -1,16 +1,19 @@
 // Touch and pen input for a composition-hosted WebView: map the message to an event kind, build the POINTER_INFO for the
-// pointer id, hand it over. When the runtime cannot build one, pointer events stop rather than throw; mouse keeps working.
+// pointer id, hand it over. The caller is told whether the browser took it, because a message the browser did not take has to
+// reach DefWindowProcW — that is what promotes a contact to legacy mouse messages. Swallowing it instead leaves touch dead.
 // Why it is shaped this way: "Input and drop under composition hosting" in doc/DESIGN.md.
 
 namespace Win32BlazorWebViewAot
 {
 	/// <summary>
-	/// Forwards <c>WM_POINTER*</c> messages to the composition controller, falling back to mouse-only input when the
-	/// installed WebView2 runtime cannot describe a pointer.
+	/// Forwards <c>WM_POINTER*</c> messages to the composition controller and reports whether the browser took the contact.
+	/// A refusal is not fatal: it means the caller must let the default window procedure see the message, which is how a
+	/// runtime without pointer support still gets mouse input for a touch.
 	/// </summary>
 	/// <remarks>
-	/// The fallback is decided once, on the first pointer message, not per message: probing an interface that does not
-	/// exist costs a failed QueryInterface every time, and touch input arrives at hundreds of messages a second.
+	/// The refusal is decided once, on the first pointer message, and remembered: probing an interface that does not exist
+	/// costs a failed QueryInterface every time, and touch input arrives at hundreds of messages a second. Remembering it also
+	/// means every later message goes straight to the default handler instead of being swallowed one by one.
 	/// </remarks>
 	internal sealed class CompositionPointerHandler(IComObject<ICoreWebView2CompositionController> controller)
 	{
@@ -29,16 +32,18 @@ namespace Win32BlazorWebViewAot
 		/// <param name="message">One of <c>WM_POINTERDOWN/UPDATE/UP/ENTER/LEAVE</c>.</param>
 		/// <param name="pointerId">The pointer id from <c>wParam</c>.</param>
 		/// <param name="parentWindow">The window that received the message; the browser keeps it as the pointer's origin.</param>
-		public void Send(uint message, uint pointerId, HWND parentWindow)
+		/// <returns><see langword="true"/> when the browser took the contact; <see langword="false"/> when it did not, so the
+		/// caller has to pass the message on to <c>DefWindowProcW</c>.</returns>
+		public bool Send(uint message, uint pointerId, HWND parentWindow)
 		{
 			if (_isSupported == false)
 			{
-				return;
+				return false;
 			}
 
 			if (!TryGetEventKind(message, out var eventKind))
 			{
-				return;
+				return false;
 			}
 
 			try
@@ -49,7 +54,7 @@ namespace Win32BlazorWebViewAot
 				if (pointerInfo is null)
 				{
 					_isSupported = false;
-					return;
+					return false;
 				}
 
 				var result = _controller.SendPointerInput(eventKind, pointerInfo, throwOnError: false);
@@ -57,16 +62,19 @@ namespace Win32BlazorWebViewAot
 				{
 					// A runtime that creates the info but cannot send it is as unusable as one that cannot create it.
 					_isSupported = false;
-					return;
+					return false;
 				}
 
 				_isSupported = true;
+				return result.IsSuccess;
 			}
 			catch (Exception)
 			{
 				// First failure disables pointer forwarding for the life of the view: a browser that rejects pointers on
-				// message 1 will reject them on message 1000, and mouse input still works.
+				// message 1 will reject them on message 1000. The contact itself is not lost — it goes to the default
+				// handler, which is what still gives the page mouse-shaped input.
 				_isSupported = false;
+				return false;
 			}
 		}
 
