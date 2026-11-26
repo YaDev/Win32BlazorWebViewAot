@@ -32,6 +32,7 @@ internal static class Program
 	private static readonly ConcurrentQueue<string> s_fatal = new();
 	private static readonly ConcurrentQueue<string> s_unobserved = new();
 	private static readonly ConcurrentQueue<string> s_logged = new();
+	private static readonly ConcurrentQueue<string> s_urlLoading = new();
 	private static readonly List<string> s_notes = [];
 
 	private static bool s_verbose;
@@ -82,6 +83,7 @@ internal static class Program
 			("15 A message handler that throws does not kill the process", (sp, ms) => ThrowingMessageHandlerIsReported(sp, ms)),
 			("16 A queue subscriber that throws does not kill the process", (sp, ms) => ThrowingQueueSubscriberIsReported(sp, ms)),
 			("17 Marking a reported failure handled keeps it out of the unhandled path", (sp, ms) => HandledFlagControlsPromotion(sp, ms)),
+			("18 A new-window request for a non-browser scheme is refused, not shell-executed", (sp, ms) => NewWindowSchemeAllowList(sp, ms)),
 			// 10b MUST stay last: it completes THIS thread's Win32MessageQueue, which is terminal — every later scenario
 			// would fault its dispatcher work with Win32DispatcherException (observed when 11 ran after it).
 			("10b Work posted to a closed queue faults instead of hanging", (sp, ms) => WorkOnClosedQueue(sp, ms)),
@@ -105,6 +107,7 @@ internal static class Program
 			s_fatal.Clear();
 			s_unobserved.Clear();
 			s_logged.Clear();
+			s_urlLoading.Clear();
 			s_notes.Clear();
 			BackgroundWorkState.Reset();
 
@@ -1223,13 +1226,49 @@ internal static class Program
 		WaitFor(() => window.IsDisposed, TimeSpan.FromSeconds(30), "the window to close");
 	}
 
+	// A scheme with no handler registered anywhere: if the host shell-executes it, nothing visible happens and only a
+	// "Failed to launch" warning shows; if the host refuses by policy, a refusal log names the scheme before any attempt.
+	private const string ProbeSchemeUri = "win32aotblazor-s1probe://payload";
+
+	/// <summary>
+	/// The page calls window.open() with a dead custom scheme. That request must surface on the app's UrlLoading event —
+	/// today it bypasses every policy and goes straight to Process.Start(UseShellExecute) — and the launch itself must be
+	/// refused because the scheme is not http/https/mailto.
+	/// </summary>
+	private static void NewWindowSchemeAllowList(IServiceProvider services, int delay)
+	{
+		var window = OpenWindow(services, delay, newWindowUri: ProbeSchemeUri);
+		WaitFor(() => BackgroundWorkState.Started >= 1, TimeSpan.FromSeconds(60), "background work to start");
+
+		// The new-window request must reach the app's UrlLoading event with the probe URI.
+		WaitFor(
+			() => s_urlLoading.Any(entry => entry.Contains(ProbeSchemeUri, StringComparison.OrdinalIgnoreCase)),
+			TimeSpan.FromSeconds(30),
+			"the UrlLoading event to report the new-window request");
+
+		// And it must have been refused before any shell attempt: a policy refusal, not a launch failure.
+		WaitFor(
+			() => s_logged.Any(entry => entry.Contains("Refused", StringComparison.Ordinal) && entry.Contains(ProbeSchemeUri, StringComparison.OrdinalIgnoreCase)),
+			TimeSpan.FromSeconds(10),
+			"a refusal log naming the probe scheme");
+
+		if (s_logged.Any(entry => entry.Contains("Failed to launch", StringComparison.Ordinal)))
+		{
+			throw new InvalidOperationException($"The probe scheme reached Process.Start: {string.Join(" | ", s_logged)}");
+		}
+
+		window.Close();
+		WaitFor(() => window.IsDisposed, TimeSpan.FromSeconds(30), "the window to close");
+	}
+
 	private static IServiceProvider CreateServices()
 	{
 		var services = new ServiceCollection();
 		services.AddWin32BlazorWebViewAot();
 		services.AddLogging(builder =>
 		{
-			builder.SetMinimumLevel(LogLevel.Error);
+			// Warning, not Error: scenario 18 asserts on the refusal log line the navigation handler writes at Warning.
+			builder.SetMinimumLevel(LogLevel.Warning);
 			builder.AddProvider(new CapturingLoggerProvider(s_logged));
 		});
 
@@ -1246,7 +1285,8 @@ internal static class Program
 		IServiceProvider services,
 		int delay,
 		bool throwException = false,
-		bool awaitJsInterop = false)
+		bool awaitJsInterop = false,
+		string? newWindowUri = null)
 	{
 		var window = new BorderlessBlazorWebViewWindow("Win32BlazorWebViewAot.LifetimeTests")
 		{
@@ -1254,7 +1294,7 @@ internal static class Program
 			QuitOnDestroy = false,
 		};
 
-		Configure(window.View, services, delay, throwException, awaitJsInterop);
+		Configure(window.View, services, delay, throwException, awaitJsInterop, newWindowUri);
 
 		window.Show();
 
@@ -1273,7 +1313,8 @@ internal static class Program
 		IServiceProvider services,
 		int delay,
 		bool throwException = false,
-		bool awaitJsInterop = false)
+		bool awaitJsInterop = false,
+		string? newWindowUri = null)
 	{
 		view.HostPage = @"wwwroot\index.html";
 		view.Services = services;
@@ -1282,7 +1323,11 @@ internal static class Program
 			[nameof(App.Delay)] = delay,
 			[nameof(App.ThrowException)] = throwException,
 			[nameof(App.AwaitJsInterop)] = awaitJsInterop,
+			[nameof(App.NewWindowUri)] = newWindowUri,
 		});
+
+		// Every navigation decision the view makes, captured for scenario 18.
+		view.UrlLoading += (_, e) => s_urlLoading.Enqueue($"{e.UrlLoadingStrategy} {e.Url}");
 
 		// Reaching this handler is the failure: it means an exception escaped to the host, which in an app is a crash.
 		view.UnhandledException += (_, e) =>

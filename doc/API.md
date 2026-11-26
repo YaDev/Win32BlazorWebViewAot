@@ -64,7 +64,11 @@ Events: `UrlLoading`, `BlazorWebViewInitializing`, `BlazorWebViewInitialized`, `
 
 | Type | Carries |
 | --- | --- |
-| `UrlLoadingEventArgs` | `Url`, and `UrlLoadingStrategy` you may rewrite: `OpenInWebView`, `OpenExternally`, `Hide` |
+| `UrlLoadingEventArgs` | `Url`, and `UrlLoadingStrategy` you may rewrite: `OpenInWebView`, `OpenExternally`, `Hide`. Fires for ordinary navigations *and* for new-window requests (`target="_blank"`, `window.open`), which default to `OpenExternally`; on a new-window request `OpenInWebView` means "block it" — the package never opens a second WebView |
+
+External launches (the `OpenExternally` outcome) only shell-execute schemes listed in `WebView2Settings.ExternalLaunchSchemes`
+(default `http`, `https`, `mailto`). Anything else — `file:`, `search-ms:`, custom protocol handlers — is refused with a warning
+and never reaches the OS loader.
 | `BlazorWebViewInitializingEventArgs` | `UserDataFolder`, `BrowserExecutableFolder`, `EnvironmentOptions`, `CoreWebView2Environment` — before the browser exists |
 | `BlazorWebViewInitializedEventArgs` | the browser objects, before the first navigation; this is where `WebView2Settings` are overridden |
 | `BlazorWebViewUnhandledExceptionEventArgs` | `Exception`, `Handled` |

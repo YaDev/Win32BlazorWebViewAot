@@ -32,6 +32,14 @@ namespace Win32BlazorWebViewAot
 		/// <summary>Zoom level, 1.0 being 100%.</summary>
 		public double ZoomFactor { get; set; } = 1.0;
 
+		/// <summary>
+		/// URI schemes the host may hand to the operating system when a navigation or a new-window request leaves the app.
+		/// Defaults to http, https and mailto. Everything else is refused with a warning and never reaches the shell:
+		/// shell-executing an arbitrary page-supplied URI (<c>file:</c>, <c>search-ms:</c>, any registered custom protocol)
+		/// is an attack surface, not a feature.
+		/// </summary>
+		public IList<string> ExternalLaunchSchemes { get; } = ["http", "https", "mailto"];
+
 		internal void Apply(IComObject<ICoreWebView2Controller> controller, IComObject<ICoreWebView2> webView)
 		{
 			using var settings = webView.Settings ?? throw new InvalidOperationException("WebView2 returned no settings.");
@@ -43,6 +51,7 @@ namespace Win32BlazorWebViewAot
 			settings.IsBuiltInErrorPageEnabled = IsBuiltInErrorPageEnabled;
 
 			// Host objects are a bridge into application code: they stay off unless an app registers one explicitly.
+			// (ExternalLaunchSchemes is not a WebView2 setting; the navigation handler enforces it before any shell call.)
 			settings.AreHostObjectsAllowed = false;
 
 			controller.ZoomFactor = ZoomFactor;

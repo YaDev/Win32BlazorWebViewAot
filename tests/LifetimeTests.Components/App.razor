@@ -9,6 +9,8 @@
 *@
 <div id="click-capture" style="position:fixed;inset:0;" @onclick="OnClick"></div>
 
+@inject IJSRuntime JS
+
 @*
     A caption strip along the top edge: scenario 13 presses on it and drags, and its mousedown starts the window's
     native move loop through WindowDragHook — the borderless-window equivalent of grabbing an OS title bar.
@@ -35,5 +37,19 @@
 	/// <summary>Whether the background work also awaits a JavaScript call that takes as long as <see cref="Delay"/>.</summary>
 	[Parameter] public bool AwaitJsInterop { get; set; }
 
+	/// <summary>
+	/// When set, the page calls <c>window.open(NewWindowUri, "_blank")</c> once after its first render: scenario 18 uses a
+	/// dead custom scheme to ask what the host does with a new-window request for a non-browser URI.
+	/// </summary>
+	[Parameter] public string? NewWindowUri { get; set; }
+
 	private void OnClick() => BackgroundWorkState.IncrementClicks();
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender && NewWindowUri is not null)
+		{
+			await JS.InvokeVoidAsync("open", NewWindowUri, "_blank");
+		}
+	}
 }

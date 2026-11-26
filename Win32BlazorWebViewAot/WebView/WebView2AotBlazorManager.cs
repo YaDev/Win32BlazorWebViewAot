@@ -155,7 +155,7 @@ namespace Win32BlazorWebViewAot
 			_blazorWebViewInitialized?.Invoke(new BlazorWebViewInitializedEventArgs(
 				_environment, controller, webView, _host.CompositionController));
 
-			_navigationHandler = new WebView2NavigationHandler(AppOriginUri, _logger, _urlLoading);
+			_navigationHandler = new WebView2NavigationHandler(AppOriginUri, _logger, _urlLoading, _webViewSettings.ExternalLaunchSchemes);
 			_resourceHandler = new WebView2ResourceHandler(this, _environment, _logger);
 
 			// One registration object for the lifetime of the browser: dropping it earlier would silently unsubscribe.
