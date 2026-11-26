@@ -38,7 +38,7 @@ sets two build defaults on your project — [what it changes](doc/DESIGN.md#what
 | `samples/Win32BlazorWebViewAot.BlazorBorderless` | Same app, borderless: the page draws its own title bar. |
 | `samples/Win32BlazorWebViewAot.Html` | Plain HTML + JS (no Razor files) with `[JSInvokable]` calls into .NET, native caption. |
 | `samples/Win32BlazorWebViewAot.HtmlBorderless` | Same HTML app, borderless, page-drawn chrome. |
-| `tests/Win32BlazorWebViewAot.LifetimeTests` | 20-scenario real-window lifetime harness; exit code is the verdict. |
+| `tests/Win32BlazorWebViewAot.LifetimeTests` | 21-scenario real-window lifetime harness; exit code is the verdict. |
 
 ## Working on this repository
 

@@ -84,6 +84,7 @@ internal static class Program
 			("16 A queue subscriber that throws does not kill the process", (sp, ms) => ThrowingQueueSubscriberIsReported(sp, ms)),
 			("17 Marking a reported failure handled keeps it out of the unhandled path", (sp, ms) => HandledFlagControlsPromotion(sp, ms)),
 			("18 A new-window request for a non-browser scheme is refused, not shell-executed", (sp, ms) => NewWindowSchemeAllowList(sp, ms)),
+			("19 A queue whose window class name was taken still runs its own work", (sp, ms) => QueueOnRecycledThreadIdRunsWork(sp, ms)),
 			// 10b MUST stay last: it completes THIS thread's Win32MessageQueue, which is terminal — every later scenario
 			// would fault its dispatcher work with Win32DispatcherException (observed when 11 ran after it).
 			("10b Work posted to a closed queue faults instead of hanging", (sp, ms) => WorkOnClosedQueue(sp, ms)),
@@ -1259,6 +1260,118 @@ internal static class Program
 
 		window.Close();
 		WaitFor(() => window.IsDisposed, TimeSpan.FromSeconds(30), "the window to close");
+	}
+
+	/// <summary>
+	/// The queue's window class used to be named after the managed thread ID, which the CLR recycles — and its registration
+	/// result was ignored. A second queue whose name was already taken therefore bound its message window to the FIRST
+	/// registrant's window procedure: posted work never ran. Managed IDs do not recycle on demand, so this scenario forces
+	/// the collision directly: it pre-registers a decoy class under the exact per-thread name before creating the queue.
+	/// With one process-wide class and HWND-routed dispatch there is no thread-derived name to collide with, and the work runs.
+	/// </summary>
+	private static void QueueOnRecycledThreadIdRunsWork(IServiceProvider services, int delay)
+	{
+		using var ready = new ManualResetEventSlim(false);
+		using var finished = new ManualResetEventSlim(false);
+		Win32MessageQueue? queue = null;
+		var ran = false;
+		Exception? threadError = null;
+
+		var worker = new Thread(() =>
+		{
+			try
+			{
+				// The name the per-thread registration would choose for THIS thread. Registering it first with a decoy
+				// procedure reproduces "class already registered" exactly as a recycled managed ID would.
+				var className = $"Win32BlazorWebViewAot.Queue.{Environment.CurrentManagedThreadId}";
+				RootDecoyProcedure(className);
+
+				queue = new Win32MessageQueue();
+				ready.Set();
+
+				while (!finished.Wait(TimeSpan.Zero))
+				{
+					PumpOnce();
+				}
+			}
+			catch (Exception exception)
+			{
+				threadError = exception;
+				ready.Set();
+			}
+			finally
+			{
+				queue?.Dispose();
+				finished.Set();
+			}
+		});
+		worker.SetApartmentState(ApartmentState.STA);
+		worker.Start();
+
+		if (!ready.Wait(TimeSpan.FromSeconds(15)))
+		{
+			finished.Set();
+			worker.Join(TimeSpan.FromSeconds(10));
+			throw new InvalidOperationException("The decoy-class thread never reported ready.");
+		}
+
+		if (threadError is not null)
+		{
+			throw new InvalidOperationException($"Creating a queue against a taken class name threw: {threadError.Message}", threadError);
+		}
+
+		// Post work to the queue that was built on top of the colliding class and wait for it to run.
+		var posted = queue!.InvokeAsync(() => Volatile.Write(ref ran, true));
+		var deadline = Stopwatch.StartNew();
+		while (!posted.IsCompleted && deadline.Elapsed < TimeSpan.FromSeconds(15))
+		{
+			PumpOnce(); // the main thread owns a queue too; keep it alive while waiting
+		}
+
+		finished.Set();
+		worker.Join(TimeSpan.FromSeconds(10));
+
+		if (posted.IsFaulted)
+		{
+			throw new InvalidOperationException($"The posted work faulted: {posted.Exception!.GetBaseException().Message}", posted.Exception);
+		}
+
+		if (!Volatile.Read(ref ran))
+		{
+			throw new InvalidOperationException(
+				"Work posted to a queue whose window class name was already taken never ran — the window bound to the decoy procedure.");
+		}
+	}
+
+	// Decoy window procedures, rooted for the life of the process: Windows calls through these pointers while the class lives.
+	private static readonly List<DirectN.WNDPROC> s_decoyProcedures = [];
+
+	private static void RootDecoyProcedure(string className)
+	{
+		var decoy = new DirectN.WNDPROC(static (hwnd, message, wParam, lParam) =>
+			DirectN.Functions.DefWindowProcW(hwnd, message, wParam, lParam));
+		s_decoyProcedures.Add(decoy);
+
+		var name = Marshal.StringToHGlobalUni(className);
+		try
+		{
+			var windowClass = new DirectN.WNDCLASSW
+			{
+				style = 0,
+				lpfnWndProc = Marshal.GetFunctionPointerForDelegate(decoy),
+				hInstance = (DirectN.HINSTANCE)(nint)DirectN.Functions.GetModuleHandleW(default),
+				lpszClassName = new DirectN.PWSTR(name),
+			};
+
+			if (DirectN.Functions.RegisterClassW(in windowClass) == 0)
+			{
+				throw new InvalidOperationException($"Decoy RegisterClassW failed for '{className}': Win32 error {Marshal.GetLastWin32Error()}.");
+			}
+		}
+		finally
+		{
+			Marshal.FreeHGlobal(name);
+		}
 	}
 
 	private static IServiceProvider CreateServices()

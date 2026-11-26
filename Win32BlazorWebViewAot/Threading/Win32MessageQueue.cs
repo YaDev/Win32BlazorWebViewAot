@@ -1,5 +1,7 @@
+
 // A thread-affine work queue for a Win32 UI thread: posted work is drained by a message-only window, and one queue serves
-// every window on that thread.
+// every window on that thread. One window class per process — like WindowProcedure — because managed thread IDs are
+// recycled and a class named after one would collide with a dead queue's registration.
 // Why one per thread and how shutdown behaves: "Threading" in doc/DESIGN.md.
 
 namespace Win32BlazorWebViewAot
@@ -14,13 +16,20 @@ namespace Win32BlazorWebViewAot
 		[ThreadStatic]
 		private static Win32MessageQueue? t_current;
 
+		// One class for the whole process, routed by HWND: a name derived from Environment.CurrentManagedThreadId would
+		// collide once the CLR recycles an ID — RegisterClassW fails against the old registration and CreateWindowExW then
+		// binds the NEW window to the OLD queue's procedure, so posted work drains into a dead queue's list.
+		private const string ClassName = "Win32BlazorWebViewAot.Queue";
+
 		private static readonly Lock s_gate = new();
 		private static readonly List<Win32MessageQueue> s_all = new();
+		private static readonly Dictionary<nint, Win32MessageQueue> s_instances = new();
+
+		// Rooted: Windows calls through this pointer for as long as any queue window of the class exists.
+		private static WNDPROC? s_wndProc;
+		private static ushort s_classAtom;
 
 		private readonly ConcurrentQueue<Action> _work = new();
-		private readonly WNDPROC _wndProc;
-		private readonly nint _classAtom;
-		private readonly string _className;
 		private nint _handle;
 		private volatile bool _complete;
 
@@ -38,12 +47,10 @@ namespace Win32BlazorWebViewAot
 				throw new InvalidOperationException("This thread already owns a Win32MessageQueue. Reuse it with GetOrCreateForCurrentThread().");
 			}
 
-			_className = $"Win32BlazorWebViewAot.Queue.{Environment.CurrentManagedThreadId}";
-			_wndProc = new WNDPROC(WndProc);
-			_classAtom = RegisterClass();
+			EnsureClassRegistered();
 
 			var instance = (nint)Native.GetModuleHandleW(default);
-			var className = NativeText.From(_className);
+			var className = NativeText.From(ClassName);
 			var windowName = NativeText.From("Win32BlazorWebViewAot queue");
 			try
 			{
@@ -73,32 +80,56 @@ namespace Win32BlazorWebViewAot
 				throw new InvalidOperationException($"Cannot create the message-only window: Win32 error {Marshal.GetLastWin32Error()}.");
 			}
 
-			SynchronizationContext = new Win32SynchronizationContext(this);
-			t_current = this;
-
+			// Map before anything can be posted; messages that arrive during CreateWindowExW itself (WM_NCCREATE, WM_CREATE)
+			// fall through to DefWindowProcW in WndProc, which is correct: the queue message never arrives that early.
 			lock (s_gate)
 			{
+				s_instances[_handle] = this;
 				s_all.Add(this);
 			}
+
+			SynchronizationContext = new Win32SynchronizationContext(this);
+			t_current = this;
 		}
 
-		private nint RegisterClass()
+		/// <summary>Registers the shared queue window class once per process.</summary>
+		/// <exception cref="InvalidOperationException">The class could not be registered.</exception>
+		private static void EnsureClassRegistered()
 		{
-			var instance = (nint)Native.GetModuleHandleW(default);
-			var className = NativeText.From(_className);
-			var windowClass = new WNDCLASSW
+			lock (s_gate)
 			{
-				style = 0,
-				lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-				hInstance = (HINSTANCE)instance,
-				lpszClassName = className.Value,
-			};
+				if (s_classAtom != 0)
+				{
+					return;
+				}
 
-			var atom = Native.RegisterClassW(in windowClass);
+				s_wndProc = new WNDPROC(WndProc);
+				var className = NativeText.From(ClassName);
+				var windowClass = new WNDCLASSW
+				{
+					style = 0,
+					lpfnWndProc = Marshal.GetFunctionPointerForDelegate(s_wndProc),
+					hInstance = (HINSTANCE)(nint)Native.GetModuleHandleW(default),
+					lpszClassName = className.Value,
+				};
 
-			// Registration copies the class name, so the buffer is ours to release immediately.
-			className.Dispose();
-			return atom;
+				var atom = Native.RegisterClassW(in windowClass);
+
+				// Registration copies the class name, so the buffer is ours to release immediately.
+				className.Dispose();
+				if (atom == 0)
+				{
+					var error = Marshal.GetLastWin32Error();
+
+					// 1410 = ERROR_CLASS_ALREADY_EXISTS: another component in the process registered the same name.
+					if (error != 1410)
+					{
+						throw new InvalidOperationException($"RegisterClassW failed with Win32 error {error}.");
+					}
+				}
+
+				s_classAtom = atom;
+			}
 		}
 
 		/// <summary>The queue owned by the current thread, creating one when the thread has none.</summary>
@@ -186,6 +217,10 @@ namespace Win32BlazorWebViewAot
 			lock (s_gate)
 			{
 				_ = s_all.Remove(this);
+				if (_handle != 0)
+				{
+					_ = s_instances.Remove(_handle);
+				}
 			}
 
 			Complete();
@@ -236,9 +271,17 @@ namespace Win32BlazorWebViewAot
 			ExecutionContext.Run(context, static state => ((Action)state!)(), callback);
 		}
 
-		private LRESULT WndProc(HWND hwnd, uint message, WPARAM wParam, LPARAM lParam)
+		private static LRESULT WndProc(HWND hwnd, uint message, WPARAM wParam, LPARAM lParam)
 		{
-			if (message != QueueMessage)
+			Win32MessageQueue? queue;
+			lock (s_gate)
+			{
+				_ = s_instances.TryGetValue(hwnd.Value, out queue);
+			}
+
+			// Messages before the handle is mapped or after it is dropped must still be answered: a window procedure that
+			// skips DefWindowProcW for them leaks default handling.
+			if (queue is null || message != QueueMessage)
 			{
 				return Native.DefWindowProcW(hwnd, message, wParam, lParam);
 			}
@@ -247,7 +290,7 @@ namespace Win32BlazorWebViewAot
 			{
 				// Drain everything that is ready. A callback that posts more work gets the next turn through the pump, so a
 				// badly behaved component cannot starve input messages.
-				while (_work.TryDequeue(out var action))
+				while (queue._work.TryDequeue(out var action))
 				{
 					try
 					{
@@ -255,7 +298,7 @@ namespace Win32BlazorWebViewAot
 					}
 					catch (Exception exception)
 					{
-						Report(exception);
+						queue.Report(exception);
 					}
 				}
 			}
