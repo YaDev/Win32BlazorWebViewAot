@@ -4,10 +4,15 @@
     Applied on package install (the file is named after the package so MSBuild imports it automatically).
   -->
 
+  <!--
+    These two are defaults, not overrides: this file is imported after the project body, so an unconditional value here
+    would silently replace whatever the application wrote. A base path of "/" is what a single-window app wants; a host
+    that mounts several Blazor apps in one window, or serves content beside an existing site, picks its own and has to win.
+  -->
   <PropertyGroup>
     <!-- The browser asks for "/_framework/blazor.webview.js", so static assets are served from the site root. -->
-    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
-    <StaticWebAssetProjectMode>Root</StaticWebAssetProjectMode>
+    <StaticWebAssetBasePath Condition="'$(StaticWebAssetBasePath)' == ''">/</StaticWebAssetBasePath>
+    <StaticWebAssetProjectMode Condition="'$(StaticWebAssetProjectMode)' == ''">Root</StaticWebAssetProjectMode>
 
     <!-- A plain `dotnet publish` of a WinExe does not run the static-web-assets preparation on its own. -->
     <CoreCompileDependsOn Condition="'$(PublishProtocol)' == 'FileSystem'">$(CoreCompileDependsOn);StaticWebAssetsPrepareForRun</CoreCompileDependsOn>

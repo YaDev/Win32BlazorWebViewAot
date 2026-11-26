@@ -85,12 +85,15 @@ Set any of these in your project file. Defaults were read out of `build/Win32Bla
 
 | Property | Default | Effect |
 | --- | --- | --- |
-| `Win32BlazorWebViewAotEmbedContent` | `true` when publishing or building Release, otherwise `false` (`targets:47`) | compile static content into the assembly instead of shipping it beside the exe |
-| `Win32BlazorWebViewAotEmbeddedBaseFolder` | `wwwroot` (`targets:51`) | prefix stripped from resource names; must match `BlazorWebView.EmbeddedContentBaseFolder` |
-| `Win32BlazorWebViewAotContentRoot` | `wwwroot` (`targets:54`) | folder globbed when a project has no static web assets |
-| `Win32BlazorWebViewAotProvideBlazorWebViewJs` | `true` (`targets:119`) | supply `_framework/blazor.webview.js` and `blazor.modules.json` to projects without static web assets |
-| `Win32BlazorWebViewAotDisableRdXml` | unset; set `true` to skip | stop rooting the generic JSON converters Blazor's IPC asks for at runtime (`targets:20`) |
+| `Win32BlazorWebViewAotEmbedContent` | `true` when publishing or building Release, otherwise `false` (`targets:52`) | compile static content into the assembly instead of shipping it beside the exe |
+| `Win32BlazorWebViewAotEmbeddedBaseFolder` | `wwwroot` (`targets:56`) | prefix stripped from resource names; must match `BlazorWebView.EmbeddedContentBaseFolder` |
+| `Win32BlazorWebViewAotContentRoot` | `wwwroot` (`targets:59`) | folder globbed when a project has no static web assets |
+| `Win32BlazorWebViewAotProvideBlazorWebViewJs` | `true` (`targets:124`) | supply `_framework/blazor.webview.js` and `blazor.modules.json` to projects without static web assets |
+| `Win32BlazorWebViewAotDisableRdXml` | unset; set `true` to skip | stop rooting the generic JSON converters Blazor's IPC asks for at runtime (`targets:26`) |
 | `Win32BlazorWebViewAotEmbedWebView2Loader` | `true` when the WebView2 package is resolvable | embed all three loader architectures in the assembly instead of loose DLLs |
 
-The two properties the package sets on your project — `TrimMode=partial`, `JsonSerializerIsReflectionEnabledByDefault=true` — are
-listed with their reasoning in [DESIGN.md](DESIGN.md#what-this-package-changes-about-your-project).
+Everything above is a default applied only when you left the property empty, and so are the three the package sets on your project:
+`TrimMode=partial`, `JsonSerializerIsReflectionEnabledByDefault=true` (reasoning in
+[DESIGN.md](DESIGN.md#what-this-package-changes-about-your-project)), plus `StaticWebAssetBasePath=/` and
+`StaticWebAssetProjectMode=Root`. Set those two yourself when one window hosts several Blazor apps, or when your content shares a
+site with something else at the root.

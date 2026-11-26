@@ -123,7 +123,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      Packed under both folders on purpose. NuGet imports build/ only for a project that references this package
+      directly, so an application that reaches it through a shared UI library used to get no props and no targets: no
+      static-asset wiring, no content embedding, no loader copy — and the failure showed up far from its cause.
+      buildTransitive/ is what those consumers receive. A project referenced both ways imports each file once per path,
+      which is why every default in these files is conditional on being unset.
+    -->
     <None Include="build\**\*" Pack="true" PackagePath="build\" />
+    <None Include="build\**\*" Pack="true" PackagePath="buildTransitive\" />
     <!-- The package readme is doc/NUGET.md, written to stand alone: nuget.org cannot resolve relative links to the rest
          of doc/. It packs under its own name, which PackageReadmeFile above has to match. -->
     <None Include="..\doc\NUGET.md" Pack="true" PackagePath="" Visible="false" />

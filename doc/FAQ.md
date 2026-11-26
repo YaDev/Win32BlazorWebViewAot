@@ -31,6 +31,19 @@ A raw `ProjectReference` does not import the package's `build/*.props` and `*.ta
 Import both files yourself — what they set is listed in
 [DESIGN.md](DESIGN.md#what-this-package-changes-about-your-project).
 
+## The app gets the package through another project and nothing is wired up
+
+It should be now: the build files ship under both `build/` (direct reference) and `buildTransitive/` (a reference that arrives
+through one of your own projects), so a shared UI library can hold the `PackageReference` while the application keeps its content
+embedding and loader copy. If it is not happening, check that the referencing project restored after upgrading — build assets are
+captured in `obj/project.assets.json`. A raw `ProjectReference` to the sources still needs the manual import above.
+
+## `StaticWebAssetBasePath` I set has no effect
+
+It does. The package's `/` is a default applied only when you left the property empty, and so is
+`StaticWebAssetProjectMode = Root`. Set them yourself when one window hosts several Blazor apps or content shares a site with an
+existing root.
+
 ## `WebView2Loader.dll` was not found
 
 The probe looks in the entry assembly's folder, the executable's own folder, then the copy embedded in this library. A single-file
