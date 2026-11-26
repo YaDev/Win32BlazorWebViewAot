@@ -32,6 +32,10 @@ namespace Win32BlazorWebViewAot
 		private readonly CompositionWebViewHost _compositionHost;
 
 		private WebView2AotBlazorManager? _manager;
+
+		// Components the renderer has mounted, tracked so a Reset change (Clear raises one with no item lists) can still
+		// tell what to unmount. Touched only on the dispatcher thread.
+		private readonly HashSet<RootComponent> _mounted = new();
 		private ILogger _logger = NullLogger<BlazorWebView>.Instance;
 		private string? _hostPage;
 		private string _startPath = "/";
@@ -282,6 +286,7 @@ namespace Win32BlazorWebViewAot
 
 				// The page is not loaded yet, so this completes synchronously.
 				_ = rootComponent.AddToWebViewManagerAsync(manager);
+				_mounted.Add(rootComponent);
 			}
 
 			_logger.StartingInitialNavigation(StartPath);
@@ -413,19 +418,24 @@ namespace Win32BlazorWebViewAot
 				return;
 			}
 
+			// Snapshot on the thread that owns the collection: Clear raises Reset with both item lists null, so the
+			// event args cannot say what went away. Diffing the wanted set against the mounted set can.
+			var desired = RootComponents.ToArray();
+
 			_ = _dispatcher.InvokeAsync(async () =>
 			{
-				var added = (eventArgs.NewItems ?? Array.Empty<object>()).Cast<RootComponent>();
-				var removed = (eventArgs.OldItems ?? Array.Empty<object>()).Cast<RootComponent>();
-
-				foreach (var component in added.Except(removed))
-				{
-					await component.AddToWebViewManagerAsync(manager).ConfigureAwait(true);
-				}
-
-				foreach (var component in removed.Except(added))
+				foreach (var component in _mounted.Where(component => !desired.Contains(component)).ToArray())
 				{
 					await component.RemoveFromWebViewManagerAsync(manager).ConfigureAwait(true);
+					_mounted.Remove(component);
+				}
+
+				foreach (var component in desired)
+				{
+					if (_mounted.Add(component))
+					{
+						await component.AddToWebViewManagerAsync(manager).ConfigureAwait(true);
+					}
 				}
 			});
 		}

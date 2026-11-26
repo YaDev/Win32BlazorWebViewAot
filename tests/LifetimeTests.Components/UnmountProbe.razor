@@ -1,0 +1,35 @@
+@*
+    A second root component the scenarios mount beside App to ask whether teardown reaches mounted components:
+    it only renders a word and counts its own mount and disposal. Scenario 21 clears RootComponents and waits on
+    these counters, which is what makes "Clear() unmounts nothing" observable from the host.
+*@
+@implements IDisposable
+
+<p>probe</p>
+
+@code {
+	private static int _mounted;
+	private static int _disposed;
+
+	/// <summary>Times this component completed a first render (the renderer really mounted it).</summary>
+	public static int Mounted => Volatile.Read(ref _mounted);
+
+	/// <summary>Times Dispose ran — the only proof the renderer unmounted the component.</summary>
+	public static int Disposed => Volatile.Read(ref _disposed);
+
+	public static void Reset()
+	{
+		Volatile.Write(ref _mounted, 0);
+		Volatile.Write(ref _disposed, 0);
+	}
+
+	protected override void OnAfterRender(bool firstRender)
+	{
+		if (firstRender)
+		{
+			Interlocked.Increment(ref _mounted);
+		}
+	}
+
+	public void Dispose() => Interlocked.Increment(ref _disposed);
+}

@@ -89,6 +89,7 @@ internal static class Program
 			("18 A new-window request for a non-browser scheme is refused, not shell-executed", (sp, ms) => NewWindowSchemeAllowList(sp, ms)),
 			("19 A queue whose window class name was taken still runs its own work", (sp, ms) => QueueOnRecycledThreadIdRunsWork(sp, ms)),
 			("20 An owned WebView2 environment is released on close; a shared one survives", (sp, ms) => OwnedEnvironmentReleasedOnClose(sp, ms)),
+			("21 Clearing root components unmounts the mounted components", (sp, ms) => ClearRootComponentsUnmounts(sp, ms)),
 			// 10b MUST stay last: it completes THIS thread's Win32MessageQueue, which is terminal — every later scenario
 			// would fault its dispatcher work with Win32DispatcherException (observed when 11 ran after it).
 			("10b Work posted to a closed queue faults instead of hanging", (sp, ms) => WorkOnClosedQueue(sp, ms)),
@@ -1433,6 +1434,29 @@ internal static class Program
 		{
 			throw new InvalidOperationException("Teardown disposed the app-owned shared environment.");
 		}
+	}
+
+	/// <summary>
+	/// RootComponents.Clear() raises NotifyCollectionChanged with a bare Reset — no old or new items — so a handler that
+	/// only reads those lists unmounts nothing and the components keep living in the renderer. The probe's Dispose is the
+	/// observable: it must run after Clear(), while the window itself stays open.
+	/// </summary>
+	private static void ClearRootComponentsUnmounts(IServiceProvider services, int delay)
+	{
+		UnmountProbe.Reset();
+
+		var window = OpenWindow(services, delay);
+		window.View.RootComponents.Add<UnmountProbe>("#extra");
+
+		WaitFor(() => UnmountProbe.Mounted >= 1, TimeSpan.FromSeconds(30), "the probe component to mount");
+
+		window.View.RootComponents.Clear();
+
+		WaitFor(() => UnmountProbe.Disposed >= 1, TimeSpan.FromSeconds(30), "Clear() to unmount the mounted probe");
+
+		// The view must still tear down cleanly with every component gone mid-life.
+		window.Close();
+		WaitFor(() => window.IsDisposed, TimeSpan.FromSeconds(30), "the window to close after clearing components");
 	}
 
 	private static IServiceProvider CreateServices()
